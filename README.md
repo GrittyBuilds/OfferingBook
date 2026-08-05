@@ -41,7 +41,14 @@ to your last file with one click.
 
 - **Offerings** — issuer, exemption (Reg D 506(b)/506(c), Reg A, Reg CF, …),
   security type, target min/max raise, price per unit, key dates (launch, Form D,
-  closings), escrow agent/bank/account, and status through the deal.
+  closings), escrow agent/bank/account, and status through the deal. Options
+  include an **uncapped raise** (no maximum), **fractional investments allowed**
+  (minimum may be waived), and an **open-ended offering** (no final close deadline).
+- **Certificate roster** — on the **Certificates** tab, record issued
+  certificates/units by **class or series** (multiple classes supported): cert #,
+  holder, capital contributed, **% interest**, preferred-return / interest rate,
+  and **accrued return** to date. The roster groups by class with per-class and
+  overall subtotals, and is included in the printable summary.
 - **A built-in process checklist** seeded on every new offering (engagement
   letter → draft PPM → set up escrow → file Form D → collect subs → verify
   accreditation → min-raise met → closing → release funds → post-closing), which

@@ -171,6 +171,8 @@ a{color:inherit;text-decoration:none}
 .form-row input,.form-row textarea,.form-row select{padding:9px 11px;border:1px solid var(--border-strong);border-radius:var(--radius-sm);font-size:14px;font-family:inherit;background:var(--surface);color:var(--text);width:100%}
 .form-row input:focus,.form-row textarea:focus,.form-row select:focus{outline:none;border-color:var(--navy);box-shadow:0 0 0 3px rgba(31,58,95,.1)}
 .form-row textarea{resize:vertical}.field-help{font-size:12px;color:var(--muted)}
+.form-check{display:flex;align-items:center;gap:9px;cursor:pointer;font-weight:600;color:var(--text);font-size:14px}
+.form-check input{width:16px;height:16px;accent-color:var(--navy);cursor:pointer;flex-shrink:0}
 .form-error{grid-column:1/-1;background:var(--red-bg);color:var(--red);padding:9px 12px;border-radius:var(--radius-sm);font-size:13px}
 .modal-actions{grid-column:1/-1}
 .money-wrap{display:flex;align-items:center;border:1px solid var(--border-strong);border-radius:var(--radius-sm);background:var(--surface);overflow:hidden}
@@ -282,6 +284,7 @@ const usd0=new Intl.NumberFormat('en-US',{style:'currency',currency:'USD',maximu
 function money(c){return c===null||c===undefined?'—':usd.format(c/100);}
 function moneyShort(c){return c===null||c===undefined?'—':usd0.format(c/100);}
 function centsToInput(c){return c===null||c===undefined?'':(c/100).toFixed(2);}
+function fmtPct(n){if(n===null||n===undefined||n==='')return'—';const v=Number(n);return isFinite(v)?(v%1===0?v:+v.toFixed(6))+'%':'—';}
 function fmtDate(s){if(!s)return'—';const d=new Date(s+'T00:00:00');return isNaN(d)?s:d.toLocaleDateString('en-US',{year:'numeric',month:'short',day:'numeric'});}
 function relDays(d){if(d===null||d===undefined)return'';if(d===0)return'today';return d>0?`in ${d} day${d===1?'':'s'}`:`${-d} day${d===-1?'':'s'} ago`;}
 function pill(t,k='default'){return el('span',{class:`pill pill-${k}`},t);}
@@ -350,6 +353,13 @@ function formModal({title,fields,values={},submitLabel='Save',onSubmit,wide=fals
   const errorBox=el('div',{class:'form-error',style:'display:none'});
   const rows=fields.map(f=>{
     let input;const common={id:`f_${f.name}`,name:f.name,placeholder:f.placeholder||''};
+    if(f.type==='checkbox'){
+      input=el('input',{id:`f_${f.name}`,name:f.name,type:'checkbox',checked:!!values[f.name]});
+      inputs[f.name]=input;
+      return el('div',{class:`form-row ${f.half?'half':''}`},
+        el('label',{class:'form-check'},input,el('span',{},f.label),
+          f.help?el('span',{class:'field-help',style:'margin-left:6px'},f.help):null));
+    }
     if(f.type==='textarea')input=el('textarea',{...common,rows:f.rows||3},values[f.name]??'');
     else if(f.type==='select')input=el('select',common,...(f.options||[]).map(o=>{
       const val=typeof o==='object'?o.value:o,label=typeof o==='object'?o.label:o;
@@ -360,18 +370,23 @@ function formModal({title,fields,values={},submitLabel='Save',onSubmit,wide=fals
       input=el('input',{...common,type,value:values[f.name]??'',min:f.min,step:f.step,
         inputmode:f.type==='money'||f.type==='number'?'decimal':undefined});
       if(f.type==='money')input.classList.add('money-input');
+      if(f.datalist){const dlid=`dl_${f.name}`;input.setAttribute('list',dlid);
+        input.__dl=el('datalist',{id:dlid},...f.datalist.map(v=>el('option',{value:v})));}
     }
     inputs[f.name]=input;
     return el('div',{class:`form-row ${f.half?'half':''}`},
       el('label',{for:`f_${f.name}`},f.label,f.required?el('span',{class:'req'},' *'):null),
       f.type==='money'?el('div',{class:'money-wrap'},el('span',{class:'money-prefix'},'$'),input):input,
+      input.__dl||null,
       f.help?el('div',{class:'field-help'},f.help):null);
   });
   const submitBtn=el('button',{class:'btn btn-primary',type:'submit'},submitLabel);
   const form=el('form',{class:'modal-body form-grid',onsubmit:async e=>{
     e.preventDefault();errorBox.style.display='none';
     const collected={};
-    for(const f of fields){let v=inputs[f.name].value;if(typeof v==='string')v=v.trim();collected[f.name]=v===''?null:v;}
+    for(const f of fields){const inp=inputs[f.name];
+      if(f.type==='checkbox'){collected[f.name]=inp.checked;continue;}
+      let v=inp.value;if(typeof v==='string')v=v.trim();collected[f.name]=v===''?null:v;}
     const missing=fields.find(f=>f.required&&!collected[f.name]);
     if(missing){errorBox.textContent=`${missing.label} is required.`;errorBox.style.display='block';inputs[missing.name].focus();return;}
     submitBtn.disabled=true;submitBtn.textContent='Saving…';
@@ -388,10 +403,10 @@ function formModal({title,fields,values={},submitLabel='Save',onSubmit,wide=fals
    STORE — in-memory data + persistence to file/localStorage
    ========================================================================== */
 const LS_KEY='offeringbook:data';
-const COLLECTIONS=['offerings','investors','subscriptions','escrow','tasks','reconciliations','closings'];
+const COLLECTIONS=['offerings','investors','subscriptions','escrow','tasks','reconciliations','closings','certificates'];
 const EMPTY=()=>({meta:{version:1,app:'OfferingBook'},
-  seq:{offerings:0,investors:0,subscriptions:0,escrow:0,tasks:0,reconciliations:0,closings:0},
-  offerings:[],investors:[],subscriptions:[],escrow:[],tasks:[],reconciliations:[],closings:[]});
+  seq:{offerings:0,investors:0,subscriptions:0,escrow:0,tasks:0,reconciliations:0,closings:0,certificates:0},
+  offerings:[],investors:[],subscriptions:[],escrow:[],tasks:[],reconciliations:[],closings:[],certificates:[]});
 let db=EMPTY();
 let fileHandle=null;
 let fileName=null;
@@ -571,13 +586,25 @@ function offeringSummary(o){
 }
 
 /* ---- Local API (mirrors the old server shapes) -------------------------- */
-function offeringFromBody(b){return{
-  name:str(b.name),issuer_name:str(b.issuer_name),exemption:str(b.exemption),security_type:str(b.security_type),
-  status:str(b.status)||'Drafting',target_min_cents:dollarsToCents(b.target_min),target_max_cents:dollarsToCents(b.target_max),
-  price_per_unit_cents:dollarsToCents(b.price_per_unit),min_investment_cents:dollarsToCents(b.min_investment),
-  launch_date:str(b.launch_date),first_close_date:str(b.first_close_date),final_close_date:str(b.final_close_date),
-  form_d_filed_date:str(b.form_d_filed_date),escrow_agent:str(b.escrow_agent),escrow_bank:str(b.escrow_bank),
-  escrow_account_number:str(b.escrow_account_number),notes:str(b.notes)};}
+function offeringFromBody(b){
+  const row={
+    name:str(b.name),issuer_name:str(b.issuer_name),exemption:str(b.exemption),security_type:str(b.security_type),
+    status:str(b.status)||'Drafting',target_min_cents:dollarsToCents(b.target_min),target_max_cents:dollarsToCents(b.target_max),
+    price_per_unit_cents:dollarsToCents(b.price_per_unit),min_investment_cents:dollarsToCents(b.min_investment),
+    launch_date:str(b.launch_date),first_close_date:str(b.first_close_date),final_close_date:str(b.final_close_date),
+    form_d_filed_date:str(b.form_d_filed_date),escrow_agent:str(b.escrow_agent),escrow_bank:str(b.escrow_bank),
+    escrow_account_number:str(b.escrow_account_number),notes:str(b.notes),
+    no_max:b.no_max?1:0,fractional_allowed:b.fractional_allowed?1:0,no_deadline:b.no_deadline?1:0};
+  if(row.no_max)row.target_max_cents=null;        // uncapped raise — ignore any amount
+  if(row.no_deadline)row.final_close_date=null;   // open-ended — ignore any date
+  return row;
+}
+// Display helpers for the optional/"none" states.
+function maxRaiseDisplay(o){return o.no_max?'No maximum (uncapped)':(o.target_max_cents!=null?money(o.target_max_cents):'—');}
+function minInvestDisplay(o){
+  if(o.min_investment_cents!=null)return money(o.min_investment_cents)+(o.fractional_allowed?' · fractional allowed':'');
+  return o.fractional_allowed?'Fractional allowed':'—';}
+function closeDeadlineDisplay(o){return o.no_deadline?'Open-ended (no deadline)':fmtDate(o.final_close_date);}
 function investorFromBody(b){return{
   name:str(b.name),entity_type:str(b.entity_type)||'Individual',contact_name:str(b.contact_name),email:str(b.email),
   phone:str(b.phone),address:str(b.address),accredited_status:str(b.accredited_status)||'Unknown',
@@ -715,7 +742,31 @@ const api={
     db.escrow=db.escrow.filter(e=>e.closing_id!==id);
     db.subscriptions.forEach(s=>{if(s.closing_id===id){s.closing_id=null;if(s.status==='Closed')s.status='Funded';s.updated_at=nowISO();}});
     db.closings=db.closings.filter(x=>x.id!==id);await persist();return{ok:true};},
+
+  // Certificate roster — units/interests issued to holders, possibly across
+  // multiple classes/series, with % interest and accrued preferred return.
+  async listCertificates(offeringId){offeringId=Number(offeringId);
+    const certs=db.certificates.filter(c=>c.offering_id===offeringId).map(c=>{
+      const i=db.investors.find(x=>x.id===c.investor_id);
+      return{...c,holder_name:i?i.name:(c.holder_name||null)};})
+      .sort((a,b)=>(a.class_name||'~').localeCompare(b.class_name||'~')||String(a.cert_number||'').localeCompare(String(b.cert_number||''),undefined,{numeric:true}));
+    const classNames=[...new Set(db.certificates.filter(c=>c.offering_id===offeringId).map(c=>c.class_name).filter(Boolean))];
+    return{certificates:certs,classNames,
+      totalCapital:certs.reduce((a,c)=>a+(c.capital_cents||0),0),
+      totalAccrued:certs.reduce((a,c)=>a+(c.accrued_cents||0),0)};},
+  async createCertificate(offeringId,b){offeringId=Number(offeringId);
+    if(!db.offerings.find(x=>x.id===offeringId))throw new Error('Offering not found');
+    const row=certFromBody(b);if(!row.cert_number)throw new Error('Certificate # is required');
+    const c={id:nextId('certificates'),offering_id:offeringId,...row,created_at:nowISO()};db.certificates.push(c);await persist();return c;},
+  async updateCertificate(id,b){id=Number(id);const c=db.certificates.find(x=>x.id===id);if(!c)throw new Error('Certificate not found');
+    const row=certFromBody(b);if(!row.cert_number)throw new Error('Certificate # is required');Object.assign(c,row);await persist();return c;},
+  async deleteCertificate(id){id=Number(id);db.certificates=db.certificates.filter(x=>x.id!==id);await persist();return{ok:true};},
 };
+function certFromBody(b){return{
+  cert_number:str(b.cert_number),investor_id:numOr(b.investor_id),holder_name:str(b.holder_name),
+  class_name:str(b.class_name),capital_cents:dollarsToCents(b.capital),percent_interest:numOr(b.percent_interest),
+  pref_return_rate:numOr(b.pref_return_rate),accrued_cents:dollarsToCents(b.accrued),
+  issue_date:str(b.issue_date),notes:str(b.notes)};}
 
 /* ============================================================================
    FORMS (open modal → call api)
@@ -728,7 +779,8 @@ function openOfferingForm(existing,onDone){
       price_per_unit:centsToInput(existing.price_per_unit_cents),min_investment:centsToInput(existing.min_investment_cents),
       launch_date:existing.launch_date,first_close_date:existing.first_close_date,final_close_date:existing.final_close_date,
       form_d_filed_date:existing.form_d_filed_date,escrow_agent:existing.escrow_agent,escrow_bank:existing.escrow_bank,
-      escrow_account_number:existing.escrow_account_number,notes:existing.notes}:{status:'Drafting'},
+      escrow_account_number:existing.escrow_account_number,notes:existing.notes,
+      no_max:existing.no_max,fractional_allowed:existing.fractional_allowed,no_deadline:existing.no_deadline}:{status:'Drafting'},
     fields:[
       {name:'name',label:'Offering name',required:true,placeholder:'e.g. Acme Fund I'},
       {name:'issuer_name',label:'Issuer / client',half:true,placeholder:'Issuing entity'},
@@ -737,12 +789,15 @@ function openOfferingForm(existing,onDone){
       {name:'security_type',label:'Security type',type:'select',options:['',...SECURITY_TYPES],half:true},
       {name:'target_min',label:'Minimum raise (min-raise)',type:'money',half:true,help:'Escrow must reach this before a closing.'},
       {name:'target_max',label:'Maximum raise',type:'money',half:true},
+      {name:'no_max',label:'No maximum — uncapped raise',type:'checkbox',help:'Ignores the Maximum raise amount.'},
       {name:'price_per_unit',label:'Price per unit',type:'money',half:true},
       {name:'min_investment',label:'Minimum investment',type:'money',half:true},
+      {name:'fractional_allowed',label:'Allow fractional investments / units (minimum may be waived)',type:'checkbox'},
       {name:'launch_date',label:'Launch date',type:'date',half:true},
       {name:'form_d_filed_date',label:'Form D filed',type:'date',half:true},
       {name:'first_close_date',label:'First / interim close',type:'date',half:true},
       {name:'final_close_date',label:'Final close deadline',type:'date',half:true},
+      {name:'no_deadline',label:'No final close deadline (open-ended)',type:'checkbox',help:'Ignores the Final close deadline date.'},
       {name:'escrow_agent',label:'Escrow agent',half:true,placeholder:'Escrow company'},
       {name:'escrow_bank',label:'Escrow bank',half:true},
       {name:'escrow_account_number',label:'Escrow account #',half:true},
@@ -862,10 +917,10 @@ function offeringCard(o){
       o.target_min_cents?el('span',{class:`oc-minraise ${s.minRaiseMet?'met':''}`},s.minRaiseMet?'✓ Min-raise met':`${s.minRaisePct}% of min`):null),
     o.target_min_cents?progressBar(s.minRaisePct,{met:s.minRaiseMet}):null,
     el('div',{class:'oc-foot'},el('span',{},`${s.subscriptions.investorCount} investor${s.subscriptions.investorCount===1?'':'s'}`),
-      days!==null&&!['Closed','Terminated'].includes(o.status)?el('span',{class:days<=14&&days>=0?'urgent-text':''},`Close ${relDays(days)}`):el('span',{},fmtDate(o.final_close_date))));
+      days!==null&&!['Closed','Terminated'].includes(o.status)?el('span',{class:days<=14&&days>=0?'urgent-text':''},`Close ${relDays(days)}`):el('span',{},o.no_deadline?'Open-ended':fmtDate(o.final_close_date))));
 }
 
-const TABS=['Overview','Investors','Escrow','Closings','Checklist','Reconciliation'];
+const TABS=['Overview','Investors','Escrow','Closings','Certificates','Checklist','Reconciliation'];
 async function renderOffering(id){
   const[offering,investors]=await Promise.all([api.getOffering(id),api.listInvestors()]);
   const state={offering,investors,tab:currentTab()};
@@ -877,7 +932,7 @@ async function renderOffering(id){
   async function drawTab(){clear(tabContent);tabContent.appendChild(el('div',{class:'loading'},'Loading…'));
     const render={Overview:()=>overviewTab(state),Investors:()=>investorsTab(state,drawTab,reloadOffering),
       Escrow:()=>escrowTab(state,drawTab,reloadOffering),Closings:()=>closingsTab(state,drawTab,reloadOffering),
-      Checklist:()=>checklistTab(state),Reconciliation:()=>reconciliationTab(state)}[state.tab];
+      Certificates:()=>certificatesTab(state),Checklist:()=>checklistTab(state),Reconciliation:()=>reconciliationTab(state)}[state.tab];
     const node=await render();clear(tabContent);tabContent.appendChild(node);}
   let header=buildHeader();
   function buildHeader(){const o=state.offering,s=o.summary;
@@ -903,11 +958,11 @@ function overviewTab(state){
     el('section',{class:'panel'},el('h2',{class:'panel-title'},'Offering details'),
       detailGrid([['Issuer / client',o.issuer_name],['Exemption',o.exemption],['Security type',o.security_type],
         ['Price per unit',o.price_per_unit_cents!=null?money(o.price_per_unit_cents):null],
-        ['Minimum investment',o.min_investment_cents!=null?money(o.min_investment_cents):null],
+        ['Minimum investment',minInvestDisplay(o)],
         ['Minimum raise',o.target_min_cents!=null?money(o.target_min_cents):null],
-        ['Maximum raise',o.target_max_cents!=null?money(o.target_max_cents):null],
+        ['Maximum raise',maxRaiseDisplay(o)],
         ['Launch date',fmtDate(o.launch_date)],['Form D filed',fmtDate(o.form_d_filed_date)],
-        ['First / interim close',fmtDate(o.first_close_date)],['Final close deadline',fmtDate(o.final_close_date)]]),
+        ['First / interim close',fmtDate(o.first_close_date)],['Final close deadline',closeDeadlineDisplay(o)]]),
       o.notes?el('div',{class:'notes-block'},el('h3',{},'Notes'),el('p',{},o.notes)):null),
     el('div',{},
       el('section',{class:'panel'},el('h2',{class:'panel-title'},'Closing readiness'),
@@ -1103,6 +1158,65 @@ function openClosingForm(offeringId,openSubs,existingCount,onDone){
   setTimeout(()=>labelInput.focus(),50);
 }
 
+async function certificatesTab(state){
+  const[{certificates,classNames,totalCapital,totalAccrued},investors]=await Promise.all([
+    api.listCertificates(state.offering.id),api.listInvestors()]);
+  const addBtn=el('button',{class:'btn btn-primary',onclick:()=>openCertificateForm(state.offering.id,investors,classNames,null,()=>refresh())},'+ Add certificate');
+  const groups=new Map();
+  for(const c of certificates){const k=c.class_name||'Unclassified';if(!groups.has(k))groups.set(k,[]);groups.get(k).push(c);}
+  return el('div',{},
+    el('div',{class:'stat-row'},
+      statCard('Certificates',String(certificates.length)),
+      statCard('Total capital contributed',money(totalCapital),{kind:'accent'}),
+      statCard('Classes / series',String(groups.size||0)),
+      statCard('Accrued return',money(totalAccrued),{sub:'interest / preferred'})),
+    el('div',{class:'section-head'},el('h2',{},'Certificate roster'),addBtn),
+    !certificates.length
+      ? emptyState('No certificates issued yet.',el('button',{class:'btn btn-primary',onclick:()=>openCertificateForm(state.offering.id,investors,classNames,null,()=>refresh())},'Add the first certificate'))
+      : el('div',{},...[...groups.entries()].map(([cls,certs])=>certClassPanel(cls,certs,state.offering.id,investors,classNames))));
+}
+function certClassPanel(cls,certs,offeringId,investors,classNames){
+  const cap=certs.reduce((a,c)=>a+(c.capital_cents||0),0);
+  const pct=certs.reduce((a,c)=>a+(Number(c.percent_interest)||0),0);
+  const accr=certs.reduce((a,c)=>a+(c.accrued_cents||0),0);
+  return el('section',{class:'panel'},
+    el('h3',{style:'margin:0 0 12px;font-size:16px'},cls,
+      el('span',{class:'muted-text',style:'font-weight:400;font-size:13px'},`  ·  ${certs.length} certificate${certs.length===1?'':'s'} · ${money(cap)}`)),
+    el('table',{class:'data-table'},
+      el('thead',{},el('tr',{},el('th',{},'Cert #'),el('th',{},'Holder'),el('th',{class:'num'},'Capital'),
+        el('th',{class:'num'},'% interest'),el('th',{class:'num'},'Pref rate'),el('th',{class:'num'},'Accrued'),el('th',{},'Issued'),el('th',{},''))),
+      el('tbody',{},...certs.map(c=>el('tr',{},
+        el('td',{},el('strong',{},c.cert_number)),el('td',{},c.holder_name||'—'),
+        el('td',{class:'num'},money(c.capital_cents)),el('td',{class:'num'},fmtPct(c.percent_interest)),
+        el('td',{class:'num'},c.pref_return_rate!=null?fmtPct(c.pref_return_rate):'—'),
+        el('td',{class:'num'},c.accrued_cents!=null?money(c.accrued_cents):'—'),el('td',{},fmtDate(c.issue_date)),
+        el('td',{class:'row-actions'},
+          el('button',{class:'icon-btn',title:'Edit',onclick:()=>openCertificateForm(offeringId,investors,classNames,c,()=>refresh())},'✎'),
+          el('button',{class:'icon-btn danger',title:'Delete',onclick:async()=>{const ok=await confirmDialog(`Delete certificate ${c.cert_number}?`,{danger:true,confirmLabel:'Delete'});if(!ok)return;await api.deleteCertificate(c.id);toast('Deleted.','success');refresh();}},'🗑'))))),
+      el('tfoot',{},el('tr',{},el('td',{},'Subtotal'),el('td',{},''),el('td',{class:'num'},money(cap)),
+        el('td',{class:'num'},fmtPct(pct)),el('td',{},''),el('td',{class:'num'},money(accr)),el('td',{colspan:'2'},'')))));
+}
+function openCertificateForm(offeringId,investors,classNames,existing,onDone){
+  const isEdit=!!existing;
+  formModal({title:isEdit?'Edit certificate':'New certificate',wide:true,submitLabel:isEdit?'Save changes':'Add certificate',
+    values:existing?{cert_number:existing.cert_number,investor_id:existing.investor_id??'',class_name:existing.class_name,
+      capital:centsToInput(existing.capital_cents),percent_interest:existing.percent_interest??'',
+      pref_return_rate:existing.pref_return_rate??'',accrued:centsToInput(existing.accrued_cents),
+      issue_date:existing.issue_date,notes:existing.notes}:{},
+    fields:[
+      {name:'cert_number',label:'Certificate #',required:true,half:true,placeholder:'e.g. A-001'},
+      {name:'class_name',label:'Class / series',half:true,datalist:classNames,placeholder:'e.g. Class A Units'},
+      {name:'investor_id',label:'Holder',type:'select',options:[{value:'',label:'— Select investor —'},...investors.map(i=>({value:i.id,label:i.name}))],help:'Link to an investor in your contact book.'},
+      {name:'capital',label:'Capital contributed',type:'money',half:true},
+      {name:'percent_interest',label:'% interest',type:'number',step:'any',half:true,help:'Ownership % (may be fractional).'},
+      {name:'pref_return_rate',label:'Preferred return / interest rate (%)',type:'number',step:'any',half:true},
+      {name:'accrued',label:'Accrued return to date',type:'money',half:true,help:'Interest / preferred return accrued, if applicable.'},
+      {name:'issue_date',label:'Issue date',type:'date',half:true},
+      {name:'notes',label:'Notes',type:'textarea'}],
+    onSubmit:async v=>{if(isEdit)await api.updateCertificate(existing.id,v);else await api.createCertificate(offeringId,v);
+      toast(isEdit?'Certificate updated.':'Certificate added.','success');onDone?.();}});
+}
+
 async function renderInvestors(){
   const investors=await api.listInvestors();
   const addBtn=el('button',{class:'btn btn-primary',onclick:()=>openInvestorForm(null,i=>navigate(`/investors/${i.id}`))},'+ New investor');
@@ -1147,9 +1261,10 @@ function reportSection(title,...nodes){return el('section',{class:'report-sectio
 function reportKV(pairs){return el('div',{class:'report-kv'},...pairs.filter(Boolean).map(([k,v])=>
   el('div',{class:'kv'},el('span',{class:'k'},k),el('span',{class:'v'},v??'—'))));}
 
-function buildSummaryReport(o,subs,escrowData,reconData,closingsData){
+function buildSummaryReport(o,subs,escrowData,reconData,closingsData,certsData){
   const s=o.summary,es=escrowData.summary;
   const closings=(closingsData&&closingsData.closings)||[];
+  const certs=(certsData&&certsData.certificates)||[];
   const committed=subs.reduce((a,x)=>a+(x.amount_committed_cents||0),0);
   const signedCount=subs.filter(x=>['Sub signed','Funded','Closed'].includes(x.status)).length;
   const genDate=new Date().toLocaleString('en-US',{dateStyle:'long',timeStyle:'short'});
@@ -1159,7 +1274,7 @@ function buildSummaryReport(o,subs,escrowData,reconData,closingsData){
     reportKV([
       ['Minimum raise (min-raise)',money(o.target_min_cents)],
       ['Cleared funds in escrow',money(s.escrow.clearedDeposits)],
-      ['Final close deadline',o.final_close_date?`${fmtDate(o.final_close_date)}${s.daysToFinalClose!=null?` (${relDays(s.daysToFinalClose)})`:''}`:'—'],
+      ['Final close deadline',o.no_deadline?'Open-ended (no deadline)':(o.final_close_date?`${fmtDate(o.final_close_date)}${s.daysToFinalClose!=null?` (${relDays(s.daysToFinalClose)})`:''}`:'—')],
       ['Amount still needed',minMet?'—':money((o.target_min_cents||0)-s.escrow.clearedDeposits)],
     ]),
     el('p',{style:'margin:10px 0 0'},
@@ -1199,11 +1314,11 @@ function buildSummaryReport(o,subs,escrowData,reconData,closingsData){
     reportSection('Offering details',reportKV([
       ['Issuer / client',o.issuer_name],['Status',o.status],['Exemption',o.exemption],['Security type',o.security_type],
       ['Price per unit',o.price_per_unit_cents!=null?money(o.price_per_unit_cents):null],
-      ['Minimum investment',o.min_investment_cents!=null?money(o.min_investment_cents):null],
+      ['Minimum investment',minInvestDisplay(o)],
       ['Minimum raise',o.target_min_cents!=null?money(o.target_min_cents):null],
-      ['Maximum raise',o.target_max_cents!=null?money(o.target_max_cents):null],
+      ['Maximum raise',maxRaiseDisplay(o)],
       ['Launch date',o.launch_date?fmtDate(o.launch_date):null],['Form D filed',o.form_d_filed_date?fmtDate(o.form_d_filed_date):null],
-      ['First / interim close',o.first_close_date?fmtDate(o.first_close_date):null],['Final close deadline',o.final_close_date?fmtDate(o.final_close_date):null],
+      ['First / interim close',o.first_close_date?fmtDate(o.first_close_date):null],['Final close deadline',closeDeadlineDisplay(o)],
       ['Escrow agent',o.escrow_agent],['Escrow bank',o.escrow_bank],['Escrow account #',o.escrow_account_number],
     ])),
     reportSection('Closing readiness',...closingNodes),
@@ -1220,6 +1335,15 @@ function buildSummaryReport(o,subs,escrowData,reconData,closingsData){
         el('td',{class:'num'},String(c.investor_count)),el('td',{class:'num'},money(c.amount_released_cents)),el('td',{class:'num'},money(c.fees_cents))))),
       el('tfoot',{},el('tr',{},el('td',{colspan:'3'},'Total released to issuer'),el('td',{class:'num'},money(closingsData.totalReleased)),
         el('td',{class:'num'},money(closings.reduce((a,c)=>a+(c.fees_cents||0),0))))))):null,
+    certs.length?reportSection('Certificate roster',el('table',{class:'report-table'},
+      el('thead',{},el('tr',{},el('th',{},'Cert #'),el('th',{},'Holder'),el('th',{},'Class'),el('th',{class:'num'},'Capital'),
+        el('th',{class:'num'},'% Interest'),el('th',{class:'num'},'Pref %'),el('th',{class:'num'},'Accrued'))),
+      el('tbody',{},...certs.map(c=>el('tr',{},el('td',{},c.cert_number),el('td',{},c.holder_name||'—'),el('td',{},c.class_name||'—'),
+        el('td',{class:'num'},money(c.capital_cents)),el('td',{class:'num'},fmtPct(c.percent_interest)),
+        el('td',{class:'num'},c.pref_return_rate!=null?fmtPct(c.pref_return_rate):'—'),el('td',{class:'num'},c.accrued_cents!=null?money(c.accrued_cents):'—')))),
+      el('tfoot',{},el('tr',{},el('td',{colspan:'3'},`Total — ${certs.length} certificate${certs.length===1?'':'s'}`),
+        el('td',{class:'num'},money(certsData.totalCapital)),el('td',{class:'num'},fmtPct(certs.reduce((a,c)=>a+(Number(c.percent_interest)||0),0))),
+        el('td',{},''),el('td',{class:'num'},money(certsData.totalAccrued)))))):null,
     reportSection('Escrow ledger',ledgerTable),
     latestRecon?reportSection('Latest bank reconciliation',reportKV([
       ['Statement date',latestRecon.statement_date?fmtDate(latestRecon.statement_date):null],
@@ -1235,11 +1359,11 @@ function buildSummaryReport(o,subs,escrowData,reconData,closingsData){
 
 async function printOfferingSummary(offeringId){
   try{
-    const[offering,subs,escrowData,reconData,closingsData]=await Promise.all([
-      api.getOffering(offeringId),api.listSubscriptions(offeringId),
-      api.listEscrow(offeringId),api.listReconciliations(offeringId),api.listClosings(offeringId)]);
+    const[offering,subs,escrowData,reconData,closingsData,certsData]=await Promise.all([
+      api.getOffering(offeringId),api.listSubscriptions(offeringId),api.listEscrow(offeringId),
+      api.listReconciliations(offeringId),api.listClosings(offeringId),api.listCertificates(offeringId)]);
     const root=document.getElementById('print-root');clear(root);
-    root.appendChild(buildSummaryReport(offering,subs,escrowData,reconData,closingsData));
+    root.appendChild(buildSummaryReport(offering,subs,escrowData,reconData,closingsData,certsData));
     const cleanup=()=>{clear(root);window.removeEventListener('afterprint',cleanup);};
     window.addEventListener('afterprint',cleanup);
     setTimeout(()=>{window.print();},60);
