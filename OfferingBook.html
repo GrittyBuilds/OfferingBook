@@ -132,6 +132,18 @@ a{color:inherit;text-decoration:none}
 .recon-field{display:flex;flex-direction:column;gap:5px}.recon-field.grow{flex:1;min-width:160px}
 .recon-field label{font-size:12px;color:var(--muted);font-weight:600}
 .recon-field .inline-input,.recon-field .money-wrap{width:100%}
+.closing-panel{margin-bottom:14px}
+.closing-chips{display:flex;flex-wrap:wrap;gap:7px;margin-top:12px}
+.chip{display:inline-flex;align-items:center;gap:7px;background:var(--surface-2);border:1px solid var(--border);border-radius:20px;padding:3px 6px 3px 11px;font-size:12.5px;font-weight:600}
+.chip-amt{background:#fff;border:1px solid var(--border);border-radius:12px;padding:1px 8px;font-weight:600;color:var(--text-soft);font-variant-numeric:tabular-nums}
+.closing-picklist{max-height:230px;overflow:auto;border:1px solid var(--border);border-radius:var(--radius-sm);padding:4px;margin-top:4px}
+.pick-row{display:flex;align-items:center;gap:11px;padding:7px 9px;border-radius:6px;cursor:pointer}
+.pick-row:hover{background:var(--surface-2)}
+.pick-row.pick-all{font-weight:700;border-bottom:1px solid var(--border);border-radius:0;margin-bottom:2px}
+.pick-row input[type=checkbox]{width:16px;height:16px;accent-color:var(--navy);cursor:pointer}
+.pick-name{flex:1;display:flex;align-items:center;gap:8px}
+.pick-status{font-size:11px;color:var(--muted);font-weight:500;background:var(--surface-2);border:1px solid var(--border);border-radius:10px;padding:0 7px}
+.pick-amt{font-variant-numeric:tabular-nums;color:var(--text-soft)}
 .toolbar{margin-bottom:14px}
 .search-input{width:100%;max-width:340px;padding:9px 13px;border:1px solid var(--border-strong);border-radius:var(--radius-sm);font-size:14px;font-family:inherit}
 .empty{text-align:center;padding:40px 20px;color:var(--muted);display:flex;flex-direction:column;align-items:center;gap:14px}
@@ -376,8 +388,10 @@ function formModal({title,fields,values={},submitLabel='Save',onSubmit,wide=fals
    STORE — in-memory data + persistence to file/localStorage
    ========================================================================== */
 const LS_KEY='offeringbook:data';
-const EMPTY=()=>({meta:{version:1,app:'OfferingBook'},seq:{offerings:0,investors:0,subscriptions:0,escrow:0,tasks:0,reconciliations:0},
-  offerings:[],investors:[],subscriptions:[],escrow:[],tasks:[],reconciliations:[]});
+const COLLECTIONS=['offerings','investors','subscriptions','escrow','tasks','reconciliations','closings'];
+const EMPTY=()=>({meta:{version:1,app:'OfferingBook'},
+  seq:{offerings:0,investors:0,subscriptions:0,escrow:0,tasks:0,reconciliations:0,closings:0},
+  offerings:[],investors:[],subscriptions:[],escrow:[],tasks:[],reconciliations:[],closings:[]});
 let db=EMPTY();
 let fileHandle=null;
 let fileName=null;
@@ -385,10 +399,10 @@ let fileName=null;
 function normalize(obj){
   const base=EMPTY();
   const out={...base,...obj,meta:{...base.meta,...(obj.meta||{})},seq:{...base.seq,...(obj.seq||{})}};
-  for(const k of['offerings','investors','subscriptions','escrow','tasks','reconciliations'])
+  for(const k of COLLECTIONS)
     if(!Array.isArray(out[k]))out[k]=[];
   // keep seq counters ahead of any existing ids
-  for(const k of['offerings','investors','subscriptions','escrow','tasks','reconciliations']){
+  for(const k of COLLECTIONS){
     const maxId=out[k].reduce((m,r)=>Math.max(m,r.id||0),0);
     out.seq[k]=Math.max(out.seq[k]||0,maxId);
   }
@@ -550,8 +564,10 @@ function offeringSummary(o){
   const minRaiseMet=targetMin>0&&escrow.clearedDeposits>=targetMin;
   const minRaisePct=targetMin>0?Math.min(100,Math.round((escrow.clearedDeposits/targetMin)*100)):null;
   const tasks=db.tasks.filter(t=>t.offering_id===o.id);
+  const closings=db.closings.filter(c=>c.offering_id===o.id);
   return{escrow,subscriptions:subs,minRaiseMet,minRaisePct,daysToFinalClose:daysUntil(o.final_close_date),
-    tasksTotal:tasks.length,tasksDone:tasks.filter(t=>t.done).length};
+    tasksTotal:tasks.length,tasksDone:tasks.filter(t=>t.done).length,
+    closingsCount:closings.length,totalReleased:closings.reduce((a,c)=>a+(c.amount_released_cents||0),0)};
 }
 
 /* ---- Local API (mirrors the old server shapes) -------------------------- */
@@ -658,6 +674,47 @@ const api={
     const r={id:nextId('reconciliations'),offering_id:offeringId,statement_date:str(b.statement_date),statement_balance_cents:bal,notes:str(b.notes),created_at:nowISO()};
     db.reconciliations.push(r);await persist();return r;},
   async deleteReconciliation(id){id=Number(id);db.reconciliations=db.reconciliations.filter(x=>x.id!==id);await persist();return{ok:true};},
+
+  // Closings / tranches. A closing records a release of escrow to the issuer and
+  // marks the included investors' subscriptions closed.
+  async listClosings(offeringId){offeringId=Number(offeringId);
+    const closings=db.closings.filter(c=>c.offering_id===offeringId)
+      .sort((a,b)=>(b.closing_date||b.created_at||'').localeCompare(a.closing_date||a.created_at||'')||b.id-a.id)
+      .map(c=>{
+        const subs=db.subscriptions.filter(s=>s.closing_id===c.id).map(s=>{const i=db.investors.find(x=>x.id===s.investor_id);
+          return{...s,investor_name:i?i.name:'(deleted investor)'};});
+        return{...c,investors:subs,investor_count:subs.length};
+      });
+    return{closings,totalReleased:closings.reduce((a,c)=>a+(c.amount_released_cents||0),0)};},
+  async createClosing(offeringId,b){offeringId=Number(offeringId);
+    if(!db.offerings.find(x=>x.id===offeringId))throw new Error('Offering not found');
+    const amount=Math.abs(dollarsToCents(b.amount_released)||0);
+    const fees=Math.abs(dollarsToCents(b.fees)||0);
+    if(!amount&&!fees)throw new Error('Enter an amount released to the issuer.');
+    const subIds=(Array.isArray(b.investor_sub_ids)?b.investor_sub_ids:[]).map(Number);
+    const count=db.closings.filter(c=>c.offering_id===offeringId).length;
+    const label=str(b.label)||`Closing ${count+1}`;
+    const date=str(b.closing_date);
+    const closing={id:nextId('closings'),offering_id:offeringId,label,closing_date:date,
+      amount_released_cents:amount,fees_cents:fees,notes:str(b.notes),created_at:nowISO()};
+    db.closings.push(closing);
+    // Record the escrow movements so the ledger and balances stay correct.
+    if(amount>0)db.escrow.push({id:nextId('escrow'),offering_id:offeringId,investor_id:null,txn_type:'release',
+      amount_cents:amount,txn_date:date,method:null,reference:label,cleared:1,notes:`Release to issuer — ${label}`,
+      created_at:nowISO(),closing_id:closing.id});
+    if(fees>0)db.escrow.push({id:nextId('escrow'),offering_id:offeringId,investor_id:null,txn_type:'fee',
+      amount_cents:fees,txn_date:date,method:null,reference:label,cleared:1,notes:`Closing costs — ${label}`,
+      created_at:nowISO(),closing_id:closing.id});
+    // Link and (optionally) close the included subscriptions.
+    const markClosed=b.mark_closed!==false;
+    for(const sid of subIds){const s=db.subscriptions.find(x=>x.id===sid&&x.offering_id===offeringId);
+      if(s){s.closing_id=closing.id;if(markClosed)s.status='Closed';s.updated_at=nowISO();}}
+    await persist();return closing;},
+  async deleteClosing(id){id=Number(id);const c=db.closings.find(x=>x.id===id);if(!c)throw new Error('Closing not found');
+    // Reverse: remove its escrow entries and un-close its subscriptions.
+    db.escrow=db.escrow.filter(e=>e.closing_id!==id);
+    db.subscriptions.forEach(s=>{if(s.closing_id===id){s.closing_id=null;if(s.status==='Closed')s.status='Funded';s.updated_at=nowISO();}});
+    db.closings=db.closings.filter(x=>x.id!==id);await persist();return{ok:true};},
 };
 
 /* ============================================================================
@@ -808,7 +865,7 @@ function offeringCard(o){
       days!==null&&!['Closed','Terminated'].includes(o.status)?el('span',{class:days<=14&&days>=0?'urgent-text':''},`Close ${relDays(days)}`):el('span',{},fmtDate(o.final_close_date))));
 }
 
-const TABS=['Overview','Investors','Escrow','Checklist','Reconciliation'];
+const TABS=['Overview','Investors','Escrow','Closings','Checklist','Reconciliation'];
 async function renderOffering(id){
   const[offering,investors]=await Promise.all([api.getOffering(id),api.listInvestors()]);
   const state={offering,investors,tab:currentTab()};
@@ -819,7 +876,8 @@ async function renderOffering(id){
   async function reloadOffering(){state.offering=await api.getOffering(id);const nh=buildHeader();header.replaceWith(nh);header=nh;}
   async function drawTab(){clear(tabContent);tabContent.appendChild(el('div',{class:'loading'},'Loading…'));
     const render={Overview:()=>overviewTab(state),Investors:()=>investorsTab(state,drawTab,reloadOffering),
-      Escrow:()=>escrowTab(state,drawTab,reloadOffering),Checklist:()=>checklistTab(state),Reconciliation:()=>reconciliationTab(state)}[state.tab];
+      Escrow:()=>escrowTab(state,drawTab,reloadOffering),Closings:()=>closingsTab(state,drawTab,reloadOffering),
+      Checklist:()=>checklistTab(state),Reconciliation:()=>reconciliationTab(state)}[state.tab];
     const node=await render();clear(tabContent);tabContent.appendChild(node);}
   let header=buildHeader();
   function buildHeader(){const o=state.offering,s=o.summary;
@@ -862,7 +920,8 @@ function overviewTab(state){
         el('div',{class:'stat-row compact'},statCard('Cleared balance',money(s.escrow.clearedBalance),{kind:'accent'}),
           statCard('Pending',money(s.escrow.pendingBalance)),statCard('Book balance',money(s.escrow.bookBalance))),
         el('dl',{class:'detail-grid'},el('dt',{},'Escrow agent'),el('dd',{},o.escrow_agent||'—'),
-          el('dt',{},'Escrow bank'),el('dd',{},o.escrow_bank||'—'),el('dt',{},'Account #'),el('dd',{},o.escrow_account_number||'—'))),
+          el('dt',{},'Escrow bank'),el('dd',{},o.escrow_bank||'—'),el('dt',{},'Account #'),el('dd',{},o.escrow_account_number||'—'),
+          el('dt',{},'Closings held'),el('dd',{},s.closingsCount?`${s.closingsCount} · ${money(s.totalReleased)} released`:'None yet'))),
       el('section',{class:'panel'},el('h2',{class:'panel-title'},'Process'),
         el('div',{class:'progress-inline'},progressBar(s.tasksTotal?Math.round((s.tasksDone/s.tasksTotal)*100):0),
           el('span',{class:'progress-label'},`${s.tasksDone}/${s.tasksTotal} steps done`)))));
@@ -956,6 +1015,94 @@ async function reconciliationTab(state){
             el('td',{},r.notes||'—'),el('td',{class:'row-actions'},el('button',{class:'icon-btn danger',title:'Delete',onclick:async()=>{await api.deleteReconciliation(r.id);toast('Deleted.','success');refresh();}},'🗑')));})))));
 }
 
+async function closingsTab(state,drawTab,reloadOffering){
+  const[{closings,totalReleased},subs]=await Promise.all([
+    api.listClosings(state.offering.id),api.listSubscriptions(state.offering.id)]);
+  // Subscriptions eligible to be included in a new closing.
+  const openSubs=subs.filter(s=>s.status!=='Withdrawn'&&!s.closing_id);
+  const s=state.offering.summary;
+
+  const addBtn=el('button',{class:'btn btn-primary',onclick:()=>openClosingForm(state.offering.id,openSubs,closings.length,
+    async()=>{await reloadOffering();drawTab();})},'+ Conduct a closing');
+
+  return el('div',{},
+    el('div',{class:'stat-row'},
+      statCard('Closings held',String(closings.length)),
+      statCard('Total released to issuer',money(totalReleased),{kind:'accent'}),
+      statCard('Cleared in escrow',money(s.escrow.clearedBalance),{sub:'remaining balance'}),
+      statCard('Investors not yet closed',String(openSubs.length),{sub:`${subs.length} total`})),
+    el('div',{class:'section-head'},el('h2',{},'Closings'),addBtn),
+    !closings.length
+      ? emptyState('No closings recorded yet.',
+          openSubs.length||s.escrow.clearedBalance?el('button',{class:'btn btn-primary',onclick:()=>openClosingForm(state.offering.id,openSubs,0,async()=>{await reloadOffering();drawTab();})},'Conduct the first closing'):null)
+      : el('div',{},...closings.map(c=>closingCard(c,drawTab,reloadOffering))));
+}
+function closingCard(c,drawTab,reloadOffering){
+  const committed=c.investors.reduce((a,s)=>a+(s.amount_committed_cents||0),0);
+  return el('section',{class:'panel closing-panel'},
+    el('div',{class:'section-head'},
+      el('div',{},el('h3',{style:'margin:0;font-size:17px'},c.label),
+        el('div',{class:'muted-text',style:'font-size:13px;margin-top:2px'},
+          fmtDate(c.closing_date)+` · ${c.investor_count} investor${c.investor_count===1?'':'s'}`+(committed?` · ${money(committed)} committed`:''))),
+      el('div',{style:'text-align:right'},
+        el('div',{},el('strong',{style:'font-size:16px'},money(c.amount_released_cents)),el('span',{class:'muted-text'},' released')),
+        c.fees_cents?el('div',{class:'muted-text',style:'font-size:12px'},money(c.fees_cents)+' fees'):null)),
+    c.investors.length?el('div',{class:'closing-chips'},...c.investors.map(s=>
+      el('span',{class:'chip'},s.investor_name,el('span',{class:'chip-amt'},money(s.amount_committed_cents))))):el('p',{class:'muted-text',style:'margin:6px 0 0'},'No investors linked to this closing.'),
+    c.notes?el('p',{class:'muted-text',style:'margin:10px 0 0'},c.notes):null,
+    el('div',{style:'margin-top:12px;text-align:right'},
+      el('button',{class:'btn btn-danger-ghost btn-sm',onclick:async()=>{
+        const ok=await confirmDialog(`Delete “${c.label}”? This removes its escrow release/fee entries and re-opens (un-closes) its investors. This cannot be undone.`,{danger:true,confirmLabel:'Delete closing'});
+        if(!ok)return;await api.deleteClosing(c.id);toast('Closing deleted.','success');await reloadOffering();drawTab();}},'Delete closing')));
+}
+function openClosingForm(offeringId,openSubs,existingCount,onDone){
+  const labelInput=el('input',{type:'text',class:'inline-input',style:'width:100%',value:`Closing ${existingCount+1}`});
+  const dateInput=el('input',{type:'date',class:'inline-input',style:'width:100%'});
+  const amountInput=el('input',{type:'text',class:'inline-input money-input',placeholder:'0.00',inputmode:'decimal',style:'width:100%'});
+  const feesInput=el('input',{type:'text',class:'inline-input money-input',placeholder:'0.00',inputmode:'decimal',style:'width:100%'});
+  const notesInput=el('textarea',{rows:2,class:'inline-input',style:'width:100%'});
+  const markClosed=el('input',{type:'checkbox',checked:true});
+  let amountEdited=false;
+  amountInput.addEventListener('input',()=>{amountEdited=true;});
+  const checks=[];
+  function recompute(){if(amountEdited)return;const sum=checks.filter(c=>c.cb.checked).reduce((a,c)=>a+(c.sub.amount_committed_cents||0),0);amountInput.value=sum?(sum/100).toFixed(2):'';}
+  const rows=openSubs.map(sub=>{const cb=el('input',{type:'checkbox',onchange:recompute});checks.push({cb,sub});
+    return el('label',{class:'pick-row'},cb,el('span',{class:'pick-name'},sub.investor_name,
+      sub.status?el('span',{class:'pick-status'},sub.status):null),el('span',{class:'pick-amt'},money(sub.amount_committed_cents)));});
+  const selectAll=el('input',{type:'checkbox',onchange:e=>{checks.forEach(c=>c.cb.checked=e.target.checked);recompute();}});
+  const picklist=openSubs.length
+    ? el('div',{},el('label',{class:'pick-row pick-all'},selectAll,el('span',{class:'pick-name'},'Select all'),el('span',{})),
+        el('div',{class:'closing-picklist'},...rows))
+    : el('p',{class:'field-help'},'No open investors to include. You can still record a release amount.');
+  const errorBox=el('div',{class:'form-error',style:'display:none'});
+  const submitBtn=el('button',{class:'btn btn-primary',type:'submit'},'Record closing');
+  function field(label,node,help){return el('div',{class:'form-row'},el('label',{},label),node,help?el('div',{class:'field-help'},help):null);}
+  const form=el('form',{class:'modal-body',onsubmit:async e=>{
+    e.preventDefault();errorBox.style.display='none';
+    const selectedIds=checks.filter(c=>c.cb.checked).map(c=>c.sub.id);
+    if(!amountInput.value.trim()&&!feesInput.value.trim()){errorBox.textContent='Enter the amount released to the issuer.';errorBox.style.display='block';return;}
+    submitBtn.disabled=true;submitBtn.textContent='Saving…';
+    try{
+      await api.createClosing(offeringId,{label:labelInput.value,closing_date:dateInput.value||null,
+        amount_released:amountInput.value,fees:feesInput.value,investor_sub_ids:selectedIds,
+        mark_closed:markClosed.checked,notes:notesInput.value||null});
+      toast('Closing recorded.','success');closeModal();onDone?.();
+    }catch(err){errorBox.textContent=err.message;errorBox.style.display='block';submitBtn.disabled=false;submitBtn.textContent='Record closing';}
+  }},
+    field('Label',labelInput),
+    el('div',{class:'form-grid',style:'gap:14px 16px'},
+      el('div',{class:'form-row half'},el('label',{},'Closing date'),dateInput),
+      el('div',{class:'form-row half'},el('label',{},'Amount released to issuer'),el('div',{class:'money-wrap'},el('span',{class:'money-prefix'},'$'),amountInput)),
+      el('div',{class:'form-row half'},el('label',{},'Fees / costs deducted'),el('div',{class:'money-wrap'},el('span',{class:'money-prefix'},'$'),feesInput))),
+    field('Investors included in this closing',picklist,'Selected investors are marked Closed and linked to this closing. The release is recorded in the escrow ledger.'),
+    el('label',{class:'pick-row',style:'padding-left:0'},markClosed,el('span',{},'Mark selected investors as “Closed”')),
+    field('Notes',notesInput),
+    errorBox,
+    el('div',{class:'modal-actions'},el('button',{class:'btn btn-ghost',type:'button',onclick:closeModal},'Cancel'),submitBtn));
+  openShell('Conduct a closing',form,{wide:true});
+  setTimeout(()=>labelInput.focus(),50);
+}
+
 async function renderInvestors(){
   const investors=await api.listInvestors();
   const addBtn=el('button',{class:'btn btn-primary',onclick:()=>openInvestorForm(null,i=>navigate(`/investors/${i.id}`))},'+ New investor');
@@ -1000,8 +1147,9 @@ function reportSection(title,...nodes){return el('section',{class:'report-sectio
 function reportKV(pairs){return el('div',{class:'report-kv'},...pairs.filter(Boolean).map(([k,v])=>
   el('div',{class:'kv'},el('span',{class:'k'},k),el('span',{class:'v'},v??'—'))));}
 
-function buildSummaryReport(o,subs,escrowData,reconData){
+function buildSummaryReport(o,subs,escrowData,reconData,closingsData){
   const s=o.summary,es=escrowData.summary;
+  const closings=(closingsData&&closingsData.closings)||[];
   const committed=subs.reduce((a,x)=>a+(x.amount_committed_cents||0),0);
   const signedCount=subs.filter(x=>['Sub signed','Funded','Closed'].includes(x.status)).length;
   const genDate=new Date().toLocaleString('en-US',{dateStyle:'long',timeStyle:'short'});
@@ -1066,6 +1214,12 @@ function buildSummaryReport(o,subs,escrowData,reconData){
       ['Cleared balance',money(es.clearedBalance)],['Book balance',money(es.bookBalance)],
     ])),
     reportSection(`Investors (${subs.length}) — ${money(committed)} committed`,investorTable),
+    closings.length?reportSection('Closings',el('table',{class:'report-table'},
+      el('thead',{},el('tr',{},el('th',{},'Closing'),el('th',{},'Date'),el('th',{class:'num'},'Investors'),el('th',{class:'num'},'Released'),el('th',{class:'num'},'Fees'))),
+      el('tbody',{},...closings.map(c=>el('tr',{},el('td',{},c.label),el('td',{},fmtDate(c.closing_date)),
+        el('td',{class:'num'},String(c.investor_count)),el('td',{class:'num'},money(c.amount_released_cents)),el('td',{class:'num'},money(c.fees_cents))))),
+      el('tfoot',{},el('tr',{},el('td',{colspan:'3'},'Total released to issuer'),el('td',{class:'num'},money(closingsData.totalReleased)),
+        el('td',{class:'num'},money(closings.reduce((a,c)=>a+(c.fees_cents||0),0))))))):null,
     reportSection('Escrow ledger',ledgerTable),
     latestRecon?reportSection('Latest bank reconciliation',reportKV([
       ['Statement date',latestRecon.statement_date?fmtDate(latestRecon.statement_date):null],
@@ -1081,11 +1235,11 @@ function buildSummaryReport(o,subs,escrowData,reconData){
 
 async function printOfferingSummary(offeringId){
   try{
-    const[offering,subs,escrowData,reconData]=await Promise.all([
+    const[offering,subs,escrowData,reconData,closingsData]=await Promise.all([
       api.getOffering(offeringId),api.listSubscriptions(offeringId),
-      api.listEscrow(offeringId),api.listReconciliations(offeringId)]);
+      api.listEscrow(offeringId),api.listReconciliations(offeringId),api.listClosings(offeringId)]);
     const root=document.getElementById('print-root');clear(root);
-    root.appendChild(buildSummaryReport(offering,subs,escrowData,reconData));
+    root.appendChild(buildSummaryReport(offering,subs,escrowData,reconData,closingsData));
     const cleanup=()=>{clear(root);window.removeEventListener('afterprint',cleanup);};
     window.addEventListener('afterprint',cleanup);
     setTimeout(()=>{window.print();},60);

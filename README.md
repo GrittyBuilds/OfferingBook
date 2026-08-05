@@ -58,11 +58,19 @@ to your last file with one click.
     approaching close deadlines.
   - **Bank reconciliation:** enter your escrow bank statement balance and the app
     shows whether it matches the cleared balance it has tracked.
+- **Multiple closings / tranches** — on the **Closings** tab of an offering,
+  "Conduct a closing" to record a closing event: pick which investors are
+  included, enter the amount released to the issuer (auto-totaled from the
+  selected investors) and any fees deducted. The app records the escrow release
+  in the ledger, marks those investors **Closed**, and keeps a per-closing
+  history. Deleting a closing cleanly reverses it (removes its escrow entries and
+  re-opens its investors). Supports rolling / interim closes.
 - **Printable closing / investor summary** — on any offering, click **🖨 Print
   summary** to generate a clean one-click report (offering terms, closing
   readiness / min-raise status, escrow totals, the full investor list with
-  contact and accreditation, and the escrow ledger). Use your browser's
-  **Print → Save as PDF** to produce a PDF for a closing binder or client update.
+  contact and accreditation, each closing, and the escrow ledger). Use your
+  browser's **Print → Save as PDF** to produce a PDF for a closing binder or
+  client update.
 
 ### Backups & safety notes
 
