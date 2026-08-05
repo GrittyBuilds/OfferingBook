@@ -1,0 +1,14 @@
+node_modules/
+
+# Local database and backups — your live data never goes into git
+data/
+*.db
+*.db-shm
+*.db-wal
+backups/
+
+# OS / editor cruft
+.DS_Store
+Thumbs.db
+*.log
+.env
