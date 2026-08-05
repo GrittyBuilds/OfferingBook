@@ -173,6 +173,36 @@ a{color:inherit;text-decoration:none}
   .content{padding:22px 20px 50px}.sidebar{width:200px}
   .form-grid{grid-template-columns:1fr}.form-row.half{grid-column:1/-1}
 }
+/* ---- Printable summary -------------------------------------------------- */
+@media screen{#print-root{display:none}}
+@media print{
+  #app,#modal-root,#toast-root{display:none!important}
+  #print-root{display:block!important}
+  @page{margin:.6in}
+  body{background:#fff}
+  .report-table th{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+}
+#print-root{color:#111;background:#fff;font-size:12px;padding:24px 30px}
+.report-head{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #111;padding-bottom:10px;margin-bottom:18px}
+.report-head h1{margin:0;font-size:21px}
+.report-sub{color:#444;font-size:12.5px;margin-top:4px}
+.report-meta{text-align:right;font-size:11px;color:#555;line-height:1.5}
+.report-meta strong{color:#111}
+.report-section{margin-bottom:18px;page-break-inside:avoid}
+.report-section h2{font-size:12px;text-transform:uppercase;letter-spacing:.6px;border-bottom:1px solid #999;padding-bottom:4px;margin:0 0 9px;color:#333}
+.report-kv{display:grid;grid-template-columns:1fr 1fr;gap:3px 28px}
+.report-kv .kv{display:flex;justify-content:space-between;gap:12px;border-bottom:1px dotted #ddd;padding:3px 0}
+.report-kv .kv .k{color:#555}.report-kv .kv .v{font-weight:600;text-align:right}
+.report-table{width:100%;border-collapse:collapse;font-size:11px}
+.report-table th,.report-table td{border:1px solid #bbb;padding:4px 7px;text-align:left;vertical-align:top}
+.report-table th{background:#ececec;font-size:9.5px;text-transform:uppercase;letter-spacing:.3px}
+.report-table td.num,.report-table th.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.report-table tr{page-break-inside:avoid}
+.report-table tfoot td{font-weight:700;border-top:2px solid #999}
+.report-badge{display:inline-block;border:1.5px solid #111;border-radius:3px;padding:1px 7px;font-weight:700;font-size:11px}
+.report-badge.met{border-color:#1f7a4d;color:#1f7a4d}
+.report-badge.no{border-color:#b23b3b;color:#b23b3b}
+.report-foot{margin-top:22px;padding-top:8px;border-top:1px solid #999;font-size:10px;color:#666;line-height:1.5}
 </style>
 </head>
 <body>
@@ -192,6 +222,7 @@ a{color:inherit;text-decoration:none}
 </div>
 <div id="modal-root"></div>
 <div id="toast-root"></div>
+<div id="print-root"></div>
 
 <script type="module">
 /* ============================================================================
@@ -793,7 +824,8 @@ async function renderOffering(id){
   let header=buildHeader();
   function buildHeader(){const o=state.offering,s=o.summary;
     return el('div',{},pageHeader(o.name,{back:{href:'#/offerings',label:'All offerings'},subtitle:o.issuer_name||undefined,
-      actions:[el('button',{class:'btn btn-ghost',onclick:()=>openOfferingForm(o,()=>reloadOffering())},'Edit'),
+      actions:[el('button',{class:'btn btn-ghost',onclick:()=>printOfferingSummary(o.id)},'🖨 Print summary'),
+        el('button',{class:'btn btn-ghost',onclick:()=>openOfferingForm(o,()=>reloadOffering())},'Edit'),
         el('button',{class:'btn btn-danger-ghost',onclick:()=>deleteOffering(o)},'Delete')]}),
       el('div',{class:'offering-summary-row'},
         el('div',{class:'osr-item'},pill(o.status,OFFERING_STATUS_KIND[o.status]||'default')),
@@ -959,6 +991,105 @@ async function renderInvestor(id){
         el('table',{class:'data-table'},el('thead',{},el('tr',{},el('th',{},'Offering'),el('th',{},'Status'),el('th',{class:'num'},'Committed'))),
           el('tbody',{},...inv.subscriptions.map(s=>el('tr',{onclick:()=>navigate(`/offerings/${s.offering_id}?tab=Investors`)},
             el('td',{},el('span',{class:'link'},s.offering_name)),el('td',{},pill(s.status,SUBSCRIPTION_KIND[s.status]||'muted')),el('td',{class:'num'},money(s.amount_committed_cents)))))))));
+}
+
+/* ============================================================================
+   PRINTABLE CLOSING / INVESTOR SUMMARY
+   ========================================================================== */
+function reportSection(title,...nodes){return el('section',{class:'report-section'},el('h2',{},title),...nodes);}
+function reportKV(pairs){return el('div',{class:'report-kv'},...pairs.filter(Boolean).map(([k,v])=>
+  el('div',{class:'kv'},el('span',{class:'k'},k),el('span',{class:'v'},v??'—'))));}
+
+function buildSummaryReport(o,subs,escrowData,reconData){
+  const s=o.summary,es=escrowData.summary;
+  const committed=subs.reduce((a,x)=>a+(x.amount_committed_cents||0),0);
+  const signedCount=subs.filter(x=>['Sub signed','Funded','Closed'].includes(x.status)).length;
+  const genDate=new Date().toLocaleString('en-US',{dateStyle:'long',timeStyle:'short'});
+  const minMet=o.target_min_cents&&s.minRaiseMet;
+
+  const closingNodes=o.target_min_cents?[
+    reportKV([
+      ['Minimum raise (min-raise)',money(o.target_min_cents)],
+      ['Cleared funds in escrow',money(s.escrow.clearedDeposits)],
+      ['Final close deadline',o.final_close_date?`${fmtDate(o.final_close_date)}${s.daysToFinalClose!=null?` (${relDays(s.daysToFinalClose)})`:''}`:'—'],
+      ['Amount still needed',minMet?'—':money((o.target_min_cents||0)-s.escrow.clearedDeposits)],
+    ]),
+    el('p',{style:'margin:10px 0 0'},
+      el('span',{class:'report-badge '+(minMet?'met':'no')},minMet?'✓ MINIMUM RAISE MET — closing may proceed':'MINIMUM RAISE NOT YET MET')),
+  ]:[el('p',{class:'report-sub'},'No minimum raise is set for this offering.')];
+
+  const investorTable=subs.length?el('table',{class:'report-table'},
+    el('thead',{},el('tr',{},el('th',{},'Investor'),el('th',{},'Email'),el('th',{},'Phone'),el('th',{},'Accredited'),
+      el('th',{class:'num'},'Committed'),el('th',{class:'num'},'Units'),el('th',{},'Sub status'),el('th',{},'Signed'))),
+    el('tbody',{},...subs.map(x=>el('tr',{},
+      el('td',{},el('strong',{},x.investor_name||'—'),x.entity_type?el('div',{style:'color:#666;font-size:10px'},x.entity_type):null),
+      el('td',{},x.email||'—'),el('td',{},x.phone||'—'),el('td',{},x.accredited_status||'—'),
+      el('td',{class:'num'},money(x.amount_committed_cents)),el('td',{class:'num'},x.units??'—'),
+      el('td',{},x.status||'—'),el('td',{},fmtDate(x.sub_signed_date))))),
+    el('tfoot',{},el('tr',{},el('td',{colspan:'4'},`Total — ${subs.length} investor${subs.length===1?'':'s'} (${signedCount} signed/funded)`),
+      el('td',{class:'num'},money(committed)),el('td',{colspan:'3'},'')))
+  ):el('p',{class:'report-sub'},'No investors recorded on this offering.');
+
+  const txns=escrowData.transactions;
+  const ledgerTable=txns.length?el('table',{class:'report-table'},
+    el('thead',{},el('tr',{},el('th',{},'Date'),el('th',{},'Type'),el('th',{},'Investor'),el('th',{},'Method / ref'),
+      el('th',{},'Cleared'),el('th',{class:'num'},'Amount'))),
+    el('tbody',{},...txns.map(t=>{const out=t.txn_type!=='deposit';
+      return el('tr',{},el('td',{},fmtDate(t.txn_date)),el('td',{},t.txn_type),el('td',{},t.investor_name||'—'),
+        el('td',{},[t.method,t.reference].filter(Boolean).join(' · ')||'—'),el('td',{},t.cleared?'Cleared':'Pending'),
+        el('td',{class:'num'},(out?'−':'+')+money(t.amount_cents)));})),
+    el('tfoot',{},el('tr',{},el('td',{colspan:'5'},'Cleared escrow balance'),el('td',{class:'num'},money(es.clearedBalance))),
+      el('tr',{},el('td',{colspan:'5'},'Book balance (incl. pending)'),el('td',{class:'num'},money(es.bookBalance))))
+  ):el('p',{class:'report-sub'},'No escrow activity recorded.');
+
+  const latestRecon=reconData.reconciliations[0];
+
+  return el('div',{class:'report'},
+    el('div',{class:'report-head'},
+      el('div',{},el('h1',{},o.name),el('div',{class:'report-sub'},[o.issuer_name,o.exemption,o.security_type].filter(Boolean).join(' · ')||'—')),
+      el('div',{class:'report-meta'},el('strong',{},'Offering & Investor Summary'),el('br'),'Status: '+o.status,el('br'),'Generated '+genDate)),
+    reportSection('Offering details',reportKV([
+      ['Issuer / client',o.issuer_name],['Status',o.status],['Exemption',o.exemption],['Security type',o.security_type],
+      ['Price per unit',o.price_per_unit_cents!=null?money(o.price_per_unit_cents):null],
+      ['Minimum investment',o.min_investment_cents!=null?money(o.min_investment_cents):null],
+      ['Minimum raise',o.target_min_cents!=null?money(o.target_min_cents):null],
+      ['Maximum raise',o.target_max_cents!=null?money(o.target_max_cents):null],
+      ['Launch date',o.launch_date?fmtDate(o.launch_date):null],['Form D filed',o.form_d_filed_date?fmtDate(o.form_d_filed_date):null],
+      ['First / interim close',o.first_close_date?fmtDate(o.first_close_date):null],['Final close deadline',o.final_close_date?fmtDate(o.final_close_date):null],
+      ['Escrow agent',o.escrow_agent],['Escrow bank',o.escrow_bank],['Escrow account #',o.escrow_account_number],
+    ])),
+    reportSection('Closing readiness',...closingNodes),
+    reportSection('Escrow summary',reportKV([
+      ['Total deposits',money(es.deposits)],['Cleared deposits',money(es.clearedDeposits)],
+      ['Releases to issuer',money(es.releases)],['Refunds to investors',money(es.refunds)],
+      ['Fees / expenses',money(es.fees)],['Pending (uncleared)',money(es.pendingBalance)],
+      ['Cleared balance',money(es.clearedBalance)],['Book balance',money(es.bookBalance)],
+    ])),
+    reportSection(`Investors (${subs.length}) — ${money(committed)} committed`,investorTable),
+    reportSection('Escrow ledger',ledgerTable),
+    latestRecon?reportSection('Latest bank reconciliation',reportKV([
+      ['Statement date',latestRecon.statement_date?fmtDate(latestRecon.statement_date):null],
+      ['Statement balance',money(latestRecon.statement_balance_cents)],
+      ['App cleared balance',money(latestRecon.statement_balance_cents-latestRecon.difference_cents)],
+      ['Difference',latestRecon.difference_cents===0?'Matches':money(latestRecon.difference_cents)],
+    ])):null,
+    el('div',{class:'report-foot'},
+      'This summary is generated by OfferingBook for internal practice-management purposes only. ',
+      'It is not a legal, accounting, or compliance record and does not constitute a filing. Verify all figures against source documents and the escrow bank statement before any closing.'),
+  );
+}
+
+async function printOfferingSummary(offeringId){
+  try{
+    const[offering,subs,escrowData,reconData]=await Promise.all([
+      api.getOffering(offeringId),api.listSubscriptions(offeringId),
+      api.listEscrow(offeringId),api.listReconciliations(offeringId)]);
+    const root=document.getElementById('print-root');clear(root);
+    root.appendChild(buildSummaryReport(offering,subs,escrowData,reconData));
+    const cleanup=()=>{clear(root);window.removeEventListener('afterprint',cleanup);};
+    window.addEventListener('afterprint',cleanup);
+    setTimeout(()=>{window.print();},60);
+  }catch(e){toast('Could not build the summary: '+e.message,'error');}
 }
 
 /* ============================================================================

@@ -58,6 +58,11 @@ to your last file with one click.
     approaching close deadlines.
   - **Bank reconciliation:** enter your escrow bank statement balance and the app
     shows whether it matches the cleared balance it has tracked.
+- **Printable closing / investor summary** — on any offering, click **🖨 Print
+  summary** to generate a clean one-click report (offering terms, closing
+  readiness / min-raise status, escrow totals, the full investor list with
+  contact and accreditation, and the escrow ledger). Use your browser's
+  **Print → Save as PDF** to produce a PDF for a closing binder or client update.
 
 ### Backups & safety notes
 
