@@ -1,0 +1,1006 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>OfferingBook</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📘</text></svg>" />
+<style>
+:root{
+  --bg:#f4f5f7;--surface:#fff;--surface-2:#f8f9fb;--border:#e3e6ec;--border-strong:#d2d7e0;
+  --text:#1c2430;--text-soft:#566072;--muted:#8b94a5;--navy:#1f3a5f;--navy-2:#2c4a73;
+  --accent:#b08d57;--accent-dark:#8f6f3d;--green:#1f7a4d;--green-bg:#e5f4ec;--amber:#9a6b12;
+  --amber-bg:#fbf1dc;--red:#b23b3b;--red-bg:#fbe9e9;--blue:#2b5f9e;--blue-bg:#e7f0fb;
+  --shadow:0 1px 2px rgba(20,30,50,.06),0 3px 12px rgba(20,30,50,.05);
+  --shadow-lg:0 10px 40px rgba(20,30,50,.18);--radius:10px;--radius-sm:7px;
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+}
+*{box-sizing:border-box}html,body{margin:0;height:100%}
+body{background:var(--bg);color:var(--text);font-size:15px;line-height:1.5}
+a{color:inherit;text-decoration:none}
+#app{display:flex;min-height:100vh}
+.sidebar{width:232px;flex-shrink:0;background:var(--navy);color:#dfe6f0;display:flex;flex-direction:column;position:sticky;top:0;height:100vh}
+.brand{display:flex;align-items:center;gap:10px;padding:22px 20px 18px}
+.brand-mark{font-size:22px}.brand-name{font-size:18px;font-weight:700;letter-spacing:.2px;color:#fff}
+.nav{display:flex;flex-direction:column;padding:8px 12px;gap:2px}
+.nav a{padding:10px 14px;border-radius:var(--radius-sm);color:#c4cfde;font-weight:500;transition:background .12s,color .12s;cursor:pointer}
+.nav a:hover{background:rgba(255,255,255,.07);color:#fff}
+.nav a.active{background:var(--accent);color:#1b1205;font-weight:600}
+.sidebar-footer{margin-top:auto;padding:14px 16px;border-top:1px solid rgba(255,255,255,.09)}
+.file-status{font-size:12px;margin-bottom:10px}
+.file-line{display:flex;align-items:center;gap:7px;color:#c4cfde}
+.dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;background:#8ea0b8}
+.dot.saved{background:#57c98a}.dot.saving{background:#e5c15a}.dot.error{background:#e07b7b}.dot.local{background:#8ea0b8}
+.file-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.file-sub{color:#8ea0b8;font-size:11px;margin-top:3px;line-height:1.35}
+.file-btns{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.mini-btn{background:rgba(255,255,255,.08);color:#dfe6f0;border:1px solid rgba(255,255,255,.14);border-radius:6px;padding:5px 9px;font-size:11.5px;font-weight:600;cursor:pointer;font-family:inherit}
+.mini-btn:hover{background:rgba(255,255,255,.16)}
+.content{flex:1;padding:30px 40px 60px;max-width:1200px;width:100%}
+.loading{color:var(--muted);padding:40px 0}
+.page-head{display:flex;align-items:flex-start;justify-content:space-between;gap:20px;margin-bottom:24px}
+.page-head h1{margin:0;font-size:26px;letter-spacing:-.3px}
+.page-sub{margin:4px 0 0;color:var(--text-soft)}
+.page-actions{display:flex;gap:10px;flex-shrink:0}
+.back-link{color:var(--text-soft);font-size:13px;display:inline-block;margin-bottom:6px;cursor:pointer}
+.back-link:hover{color:var(--navy)}
+.btn{border:1px solid transparent;border-radius:var(--radius-sm);padding:9px 16px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;transition:background .12s,border-color .12s;white-space:nowrap}
+.btn-sm{padding:6px 12px;font-size:13px}
+.btn-primary{background:var(--navy);color:#fff}.btn-primary:hover{background:var(--navy-2)}
+.btn-primary:disabled{opacity:.6;cursor:default}
+.btn-ghost{background:var(--surface);color:var(--text);border-color:var(--border-strong)}.btn-ghost:hover{background:var(--surface-2)}
+.btn-danger{background:var(--red);color:#fff}.btn-danger:hover{background:#9c3232}
+.btn-danger-ghost{background:var(--surface);color:var(--red);border-color:#e6c3c3}.btn-danger-ghost:hover{background:var(--red-bg)}
+.stat-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin-bottom:26px}
+.stat-row.compact{grid-template-columns:repeat(3,1fr);margin-bottom:16px}
+.stat-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px 18px;box-shadow:var(--shadow)}
+.stat-label{font-size:12px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);font-weight:600}
+.stat-value{font-size:26px;font-weight:700;margin-top:6px;letter-spacing:-.5px}
+.stat-sub{font-size:12.5px;color:var(--text-soft);margin-top:3px}
+.stat-accent .stat-value{color:var(--accent-dark)}.stat-success .stat-value{color:var(--green)}
+.panel{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:20px 22px;box-shadow:var(--shadow);margin-bottom:18px}
+.panel-title{margin:0 0 14px;font-size:15px;text-transform:uppercase;letter-spacing:.5px;color:var(--text-soft);font-weight:700}
+.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:18px;align-items:start}
+.dash-cols{display:grid;grid-template-columns:1fr 1fr;gap:18px;align-items:start}
+.section-head{display:flex;justify-content:space-between;align-items:center;margin:6px 0 14px}
+.section-head h2{margin:0;font-size:18px}
+.detail-grid{display:grid;grid-template-columns:150px 1fr;gap:8px 16px;margin:0}
+.detail-grid dt{color:var(--muted);font-size:13px}.detail-grid dd{margin:0;font-size:14px}
+.notes-block{margin-top:16px;padding-top:14px;border-top:1px solid var(--border)}
+.notes-block h3{margin:0 0 6px;font-size:12px;text-transform:uppercase;color:var(--muted)}
+.notes-block p{margin:0;white-space:pre-wrap;color:var(--text-soft)}
+.pill{display:inline-block;padding:2px 9px;border-radius:20px;font-size:12px;font-weight:600;white-space:nowrap}
+.pill-default{background:#eceff3;color:#4a5566}.pill-muted{background:#eef0f3;color:#8b94a5}
+.pill-info{background:var(--blue-bg);color:var(--blue)}.pill-success{background:var(--green-bg);color:var(--green)}
+.pill-warn{background:var(--amber-bg);color:var(--amber)}.pill-danger{background:var(--red-bg);color:var(--red)}
+.tag{display:inline-block;padding:2px 9px;border-radius:6px;background:var(--surface-2);border:1px solid var(--border);font-size:12px;color:var(--text-soft)}
+.card-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:16px}
+.offering-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:18px 20px;box-shadow:var(--shadow);cursor:pointer;transition:transform .1s,box-shadow .12s,border-color .12s}
+.offering-card:hover{transform:translateY(-2px);box-shadow:var(--shadow-lg);border-color:var(--border-strong)}
+.oc-head{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+.oc-name{margin:0;font-size:17px}.oc-issuer{color:var(--text-soft);font-size:13px;margin-top:2px}
+.oc-tags{display:flex;gap:6px;flex-wrap:wrap;margin:12px 0}
+.oc-escrow{display:flex;justify-content:space-between;align-items:baseline;margin-top:6px}
+.oc-escrow-val{font-size:20px;font-weight:700;letter-spacing:-.4px}.oc-escrow-lbl{color:var(--muted);font-size:13px}
+.oc-minraise{font-size:12.5px;font-weight:600;color:var(--amber)}.oc-minraise.met{color:var(--green)}
+.oc-foot{display:flex;justify-content:space-between;margin-top:12px;font-size:13px;color:var(--text-soft)}
+.urgent-text{color:var(--red)!important;font-weight:600}
+.progress{height:7px;background:#e9ecf1;border-radius:20px;overflow:hidden;margin:8px 0}
+.progress-fill{height:100%;background:var(--accent);border-radius:20px;transition:width .3s}
+.progress-fill.met{background:var(--green)}
+.progress-inline{display:flex;align-items:center;gap:12px}.progress-inline .progress{flex:1;margin:0}
+.progress-label{font-size:13px;color:var(--text-soft);white-space:nowrap}
+.closing-list,.mini-list{list-style:none;margin:0;padding:0}
+.closing-item,.mini-item{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:11px 12px;border-radius:var(--radius-sm);cursor:pointer;transition:background .1s}
+.closing-item:hover,.mini-item:hover{background:var(--surface-2)}
+.closing-item+.closing-item,.mini-item+.mini-item{border-top:1px solid var(--border)}
+.closing-item.urgent{background:#fdf6ec}
+.closing-main,.mini-main{display:flex;flex-direction:column;gap:2px;min-width:0}
+.closing-name,.mini-name{font-weight:600}.closing-date,.mini-meta{font-size:12.5px;color:var(--text-soft)}
+.mini-right{display:flex;align-items:center;gap:10px}.mini-escrow{font-variant-numeric:tabular-nums;font-weight:600}
+.offering-summary-row{display:flex;flex-wrap:wrap;gap:16px;align-items:center;margin:-8px 0 20px;padding-bottom:18px;border-bottom:1px solid var(--border)}
+.osr-item{font-size:14px}.muted-text{color:var(--muted)}
+.readiness-figures{margin-bottom:4px}.readiness-note{margin-top:10px}
+.tab-bar{display:flex;gap:4px;border-bottom:2px solid var(--border);margin-bottom:22px;flex-wrap:wrap}
+.tab{background:none;border:none;padding:10px 16px;font-size:14px;font-weight:600;color:var(--text-soft);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-2px;font-family:inherit}
+.tab:hover{color:var(--navy)}.tab.active{color:var(--navy);border-bottom-color:var(--accent)}
+.data-table{width:100%;border-collapse:collapse;font-size:14px}
+.data-table th{text-align:left;font-size:11.5px;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);font-weight:700;padding:8px 12px;border-bottom:1px solid var(--border)}
+.data-table td{padding:11px 12px;border-bottom:1px solid var(--border);vertical-align:middle}
+.data-table tbody tr:last-child td{border-bottom:none}
+.data-table .num{text-align:right;font-variant-numeric:tabular-nums}
+.data-table.hover tbody tr{cursor:pointer}.data-table.hover tbody tr:hover{background:var(--surface-2)}
+.cell-sub{font-size:12px;color:var(--muted);margin-top:2px}
+.num.pos{color:var(--green);font-weight:600}.num.neg{color:var(--red);font-weight:600}
+.link{color:var(--blue);font-weight:600;cursor:pointer}.link:hover{text-decoration:underline}
+.row-actions{text-align:right;white-space:nowrap}
+.icon-btn{background:none;border:none;cursor:pointer;font-size:15px;padding:4px 6px;border-radius:5px;opacity:.65}
+.icon-btn:hover{opacity:1;background:var(--surface-2)}.icon-btn.danger:hover{background:var(--red-bg)}
+.clear-toggle{border:1px solid var(--border-strong);background:var(--surface);border-radius:20px;padding:3px 10px;font-size:12px;font-weight:600;cursor:pointer;color:var(--text-soft)}
+.clear-toggle.on{background:var(--green-bg);border-color:#b6ddc6;color:var(--green)}
+.checklist{list-style:none;margin:0;padding:0}
+.check-item{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:10px 4px;border-bottom:1px solid var(--border)}
+.check-label{display:flex;align-items:center;gap:11px;cursor:pointer;flex:1}
+.check-label input{width:17px;height:17px;accent-color:var(--green);cursor:pointer}
+.check-item.done .check-text{text-decoration:line-through;color:var(--muted)}
+.check-right{display:flex;align-items:center;gap:10px}.check-due{font-size:12px;color:var(--text-soft)}
+.count-label{font-size:13px;color:var(--text-soft);font-weight:600}
+.add-task-row{display:flex;gap:8px;margin-top:16px;align-items:center}
+.inline-input{padding:8px 11px;border:1px solid var(--border-strong);border-radius:var(--radius-sm);font-size:14px;font-family:inherit}
+.inline-input.date{width:150px}.add-task-row .inline-input:first-child{flex:1}
+.recon-form{display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;margin-top:14px}
+.recon-field{display:flex;flex-direction:column;gap:5px}.recon-field.grow{flex:1;min-width:160px}
+.recon-field label{font-size:12px;color:var(--muted);font-weight:600}
+.recon-field .inline-input,.recon-field .money-wrap{width:100%}
+.toolbar{margin-bottom:14px}
+.search-input{width:100%;max-width:340px;padding:9px 13px;border:1px solid var(--border-strong);border-radius:var(--radius-sm);font-size:14px;font-family:inherit}
+.empty{text-align:center;padding:40px 20px;color:var(--muted);display:flex;flex-direction:column;align-items:center;gap:14px}
+.error-state{text-align:center;padding:60px 20px}.error-state h2{color:var(--red)}
+.welcome{max-width:640px}
+.welcome .panel h2{margin-top:0}
+.welcome ul{color:var(--text-soft);padding-left:20px}
+.welcome-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:8px}
+.browser-warn{background:var(--amber-bg);color:var(--amber);border:1px solid #ecd9a8;border-radius:var(--radius-sm);padding:10px 14px;font-size:13px;margin-bottom:16px}
+#modal-root{display:none}#modal-root.open{display:block}
+.modal-backdrop{position:fixed;inset:0;background:rgba(20,28,42,.5);display:flex;align-items:flex-start;justify-content:center;padding:48px 20px;overflow-y:auto;z-index:100}
+.modal{background:var(--surface);border-radius:12px;width:100%;max-width:480px;box-shadow:var(--shadow-lg);animation:pop .14s ease-out}
+.modal-wide{max-width:680px}
+@keyframes pop{from{transform:translateY(8px) scale(.99);opacity:0}to{transform:none;opacity:1}}
+.modal-head{display:flex;justify-content:space-between;align-items:center;padding:18px 22px;border-bottom:1px solid var(--border)}
+.modal-head h2{margin:0;font-size:18px}
+.modal-close{background:none;border:none;font-size:16px;cursor:pointer;color:var(--muted);padding:4px 8px;border-radius:5px}
+.modal-close:hover{background:var(--surface-2);color:var(--text)}
+.modal-body{padding:20px 22px}.confirm-text{margin:0 0 8px}
+.modal-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:20px}
+.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px 16px}
+.form-row{display:flex;flex-direction:column;gap:5px;grid-column:1/-1}
+.form-row.half{grid-column:span 1}
+.form-row label{font-size:13px;font-weight:600;color:var(--text-soft)}.form-row label .req{color:var(--red)}
+.form-row input,.form-row textarea,.form-row select{padding:9px 11px;border:1px solid var(--border-strong);border-radius:var(--radius-sm);font-size:14px;font-family:inherit;background:var(--surface);color:var(--text);width:100%}
+.form-row input:focus,.form-row textarea:focus,.form-row select:focus{outline:none;border-color:var(--navy);box-shadow:0 0 0 3px rgba(31,58,95,.1)}
+.form-row textarea{resize:vertical}.field-help{font-size:12px;color:var(--muted)}
+.form-error{grid-column:1/-1;background:var(--red-bg);color:var(--red);padding:9px 12px;border-radius:var(--radius-sm);font-size:13px}
+.modal-actions{grid-column:1/-1}
+.money-wrap{display:flex;align-items:center;border:1px solid var(--border-strong);border-radius:var(--radius-sm);background:var(--surface);overflow:hidden}
+.money-wrap:focus-within{border-color:var(--navy);box-shadow:0 0 0 3px rgba(31,58,95,.1)}
+.money-prefix{padding:0 4px 0 11px;color:var(--muted)}
+.money-wrap input{border:none!important;box-shadow:none!important;padding-left:4px!important}
+#toast-root{position:fixed;bottom:22px;right:22px;display:flex;flex-direction:column;gap:10px;z-index:200}
+.toast{background:var(--navy);color:#fff;padding:12px 18px;border-radius:var(--radius-sm);box-shadow:var(--shadow-lg);font-size:14px;opacity:0;transform:translateY(10px);transition:opacity .25s,transform .25s;max-width:340px}
+.toast.show{opacity:1;transform:none}.toast-success{background:var(--green)}.toast-error{background:var(--red)}
+@media(max-width:900px){
+  .grid-2,.dash-cols,.stat-row.compact{grid-template-columns:1fr}
+  .content{padding:22px 20px 50px}.sidebar{width:200px}
+  .form-grid{grid-template-columns:1fr}.form-row.half{grid-column:1/-1}
+}
+</style>
+</head>
+<body>
+<div id="app">
+  <aside class="sidebar">
+    <div class="brand"><span class="brand-mark">📘</span><span class="brand-name">OfferingBook</span></div>
+    <nav class="nav">
+      <a data-nav="dashboard" onclick="location.hash='#/'">Dashboard</a>
+      <a data-nav="offerings" onclick="location.hash='#/offerings'">Offerings</a>
+      <a data-nav="investors" onclick="location.hash='#/investors'">Investors</a>
+    </nav>
+    <div class="sidebar-footer">
+      <div class="file-status" id="file-status"></div>
+    </div>
+  </aside>
+  <main class="content" id="view"></main>
+</div>
+<div id="modal-root"></div>
+<div id="toast-root"></div>
+
+<script type="module">
+/* ============================================================================
+   OfferingBook — single-file, no-install web app.
+   Data is held in memory, mirrored to localStorage (crash safety), and
+   autosaved to a real file you choose via the File System Access API.
+   ========================================================================== */
+
+/* ---- Constants ---------------------------------------------------------- */
+const OFFERING_STATUSES=['Drafting','Filed','Open','Closing','Closed','Terminated'];
+const OFFERING_STATUS_KIND={Drafting:'default',Filed:'info',Open:'success',Closing:'warn',Closed:'muted',Terminated:'danger'};
+const EXEMPTIONS=['Reg D 506(b)','Reg D 506(c)','Reg D 504','Reg A+ Tier 1','Reg A+ Tier 2','Reg CF','Reg S','Section 4(a)(2)','Intrastate','Other'];
+const SECURITY_TYPES=['Common Equity','Preferred Equity','LLC Units','LP Interests','Promissory Note','Convertible Note','SAFE','Revenue Share','Other'];
+const ENTITY_TYPES=['Individual','Entity','Trust','Joint','IRA / Retirement'];
+const ACCREDITED_STATUSES=['Unknown','Self-certified','Verified','Not accredited'];
+const ACCREDITED_KIND={Unknown:'muted','Self-certified':'info',Verified:'success','Not accredited':'danger'};
+const SUBSCRIPTION_STATUSES=['Prospect','Sub sent','Sub signed','Funded','Closed','Withdrawn'];
+const SUBSCRIPTION_KIND={Prospect:'muted','Sub sent':'info','Sub signed':'warn',Funded:'success',Closed:'success',Withdrawn:'danger'};
+const TXN_TYPES=[{value:'deposit',label:'Deposit (investor → escrow)'},{value:'release',label:'Release (escrow → issuer)'},{value:'refund',label:'Refund (escrow → investor)'},{value:'fee',label:'Fee / expense (escrow → out)'}];
+const TXN_KIND={deposit:'success',release:'info',refund:'warn',fee:'muted'};
+const PAYMENT_METHODS=['Wire','Check','ACH','Other'];
+const DEFAULT_CHECKLIST=['Engagement letter signed','Draft Private Placement Memorandum','Draft subscription agreement','Prepare accredited-investor questionnaire','Set up escrow account with escrow agent','Blue sky / state notice filings','File Form D with the SEC','Distribute offering documents to investors','Collect signed subscription agreements','Verify accredited-investor status','Confirm escrow minimum (min-raise) met','Hold closing','Release escrow funds to issuer','Post-closing filings / amendments'];
+
+/* ---- DOM + format helpers ----------------------------------------------- */
+function el(tag,props={},...children){
+  const node=document.createElement(tag);
+  for(const[k,v]of Object.entries(props||{})){
+    if(v===null||v===undefined||v===false)continue;
+    if(k==='class')node.className=v;
+    else if(k==='html')node.innerHTML=v;
+    else if(k==='dataset')Object.assign(node.dataset,v);
+    else if(k.startsWith('on')&&typeof v==='function')node.addEventListener(k.slice(2).toLowerCase(),v);
+    else if(k in node&&k!=='list'){try{node[k]=v;}catch{node.setAttribute(k,v);}}
+    else node.setAttribute(k,v);
+  }
+  for(const c of children.flat()){
+    if(c===null||c===undefined||c===false)continue;
+    node.appendChild(c instanceof Node?c:document.createTextNode(String(c)));
+  }
+  return node;
+}
+function clear(n){while(n.firstChild)n.removeChild(n.firstChild);return n;}
+const usd=new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'});
+const usd0=new Intl.NumberFormat('en-US',{style:'currency',currency:'USD',maximumFractionDigits:0});
+function money(c){return c===null||c===undefined?'—':usd.format(c/100);}
+function moneyShort(c){return c===null||c===undefined?'—':usd0.format(c/100);}
+function centsToInput(c){return c===null||c===undefined?'':(c/100).toFixed(2);}
+function fmtDate(s){if(!s)return'—';const d=new Date(s+'T00:00:00');return isNaN(d)?s:d.toLocaleDateString('en-US',{year:'numeric',month:'short',day:'numeric'});}
+function relDays(d){if(d===null||d===undefined)return'';if(d===0)return'today';return d>0?`in ${d} day${d===1?'':'s'}`:`${-d} day${d===-1?'':'s'} ago`;}
+function pill(t,k='default'){return el('span',{class:`pill pill-${k}`},t);}
+function toast(msg,kind='info'){
+  const root=document.getElementById('toast-root');
+  const t=el('div',{class:`toast toast-${kind}`},msg);root.appendChild(t);
+  requestAnimationFrame(()=>t.classList.add('show'));
+  setTimeout(()=>{t.classList.remove('show');setTimeout(()=>t.remove(),300);},3200);
+}
+function dollarsToCents(v){if(v===null||v===undefined||v==='')return null;const n=typeof v==='number'?v:Number(String(v).replace(/[$,\s]/g,''));return isFinite(n)?Math.round(n*100):null;}
+function str(v){if(v===null||v===undefined)return null;const s=String(v).trim();return s===''?null:s;}
+function numOr(v,d=null){if(v===null||v===undefined||v==='')return d;const n=Number(v);return isFinite(n)?n:d;}
+function nowISO(){return new Date().toISOString();}
+
+/* ---- Components ---------------------------------------------------------- */
+function pageHeader(title,{subtitle,actions,back}={}){
+  return el('header',{class:'page-head'},
+    el('div',{},
+      back?el('a',{class:'back-link',onclick:()=>location.hash=back.href},'← '+back.label):null,
+      el('h1',{},title),
+      subtitle?el('p',{class:'page-sub'},subtitle):null),
+    actions?el('div',{class:'page-actions'},...actions):null);
+}
+function statCard(label,value,{sub,kind}={}){
+  return el('div',{class:`stat-card ${kind?'stat-'+kind:''}`},
+    el('div',{class:'stat-label'},label),el('div',{class:'stat-value'},value),
+    sub?el('div',{class:'stat-sub'},sub):null);
+}
+function progressBar(pct,{met=false}={}){
+  const c=Math.max(0,Math.min(100,pct??0));
+  return el('div',{class:'progress'},el('div',{class:`progress-fill ${met?'met':''}`,style:`width:${c}%`}));
+}
+function emptyState(msg,actionNode){return el('div',{class:'empty'},el('p',{},msg),actionNode||null);}
+function detailGrid(pairs){
+  return el('dl',{class:'detail-grid'},...pairs.filter(Boolean).flatMap(([k,v])=>[el('dt',{},k),el('dd',{},v??'—')]));
+}
+
+/* ---- Modal + forms ------------------------------------------------------ */
+let escHandler=null;
+function closeModal(){
+  const root=document.getElementById('modal-root');clear(root);root.classList.remove('open');
+  if(escHandler){document.removeEventListener('keydown',escHandler);escHandler=null;}
+}
+function openShell(title,contentNode,{wide=false}={}){
+  const root=document.getElementById('modal-root');clear(root);
+  const dialog=el('div',{class:`modal ${wide?'modal-wide':''}`},
+    el('div',{class:'modal-head'},el('h2',{},title),el('button',{class:'modal-close',onclick:closeModal},'✕')),
+    contentNode);
+  root.appendChild(el('div',{class:'modal-backdrop',onclick:e=>{if(e.target===e.currentTarget)closeModal();}},dialog));
+  root.classList.add('open');
+  escHandler=e=>{if(e.key==='Escape')closeModal();};document.addEventListener('keydown',escHandler);
+  return dialog;
+}
+function confirmDialog(message,{danger=false,confirmLabel='Confirm'}={}){
+  return new Promise(resolve=>{
+    const body=el('div',{class:'modal-body'},
+      el('p',{class:'confirm-text'},message),
+      el('div',{class:'modal-actions'},
+        el('button',{class:'btn btn-ghost',onclick:()=>{closeModal();resolve(false);}},'Cancel'),
+        el('button',{class:`btn ${danger?'btn-danger':'btn-primary'}`,onclick:()=>{closeModal();resolve(true);}},confirmLabel)));
+    openShell(danger?'Please confirm':'Confirm',body);
+  });
+}
+function formModal({title,fields,values={},submitLabel='Save',onSubmit,wide=false}){
+  const inputs={};
+  const errorBox=el('div',{class:'form-error',style:'display:none'});
+  const rows=fields.map(f=>{
+    let input;const common={id:`f_${f.name}`,name:f.name,placeholder:f.placeholder||''};
+    if(f.type==='textarea')input=el('textarea',{...common,rows:f.rows||3},values[f.name]??'');
+    else if(f.type==='select')input=el('select',common,...(f.options||[]).map(o=>{
+      const val=typeof o==='object'?o.value:o,label=typeof o==='object'?o.label:o;
+      return el('option',{value:val,selected:String(values[f.name]??'')===String(val)},label);
+    }));
+    else{
+      const type=f.type==='money'?'text':(f.type||'text');
+      input=el('input',{...common,type,value:values[f.name]??'',min:f.min,step:f.step,
+        inputmode:f.type==='money'||f.type==='number'?'decimal':undefined});
+      if(f.type==='money')input.classList.add('money-input');
+    }
+    inputs[f.name]=input;
+    return el('div',{class:`form-row ${f.half?'half':''}`},
+      el('label',{for:`f_${f.name}`},f.label,f.required?el('span',{class:'req'},' *'):null),
+      f.type==='money'?el('div',{class:'money-wrap'},el('span',{class:'money-prefix'},'$'),input):input,
+      f.help?el('div',{class:'field-help'},f.help):null);
+  });
+  const submitBtn=el('button',{class:'btn btn-primary',type:'submit'},submitLabel);
+  const form=el('form',{class:'modal-body form-grid',onsubmit:async e=>{
+    e.preventDefault();errorBox.style.display='none';
+    const collected={};
+    for(const f of fields){let v=inputs[f.name].value;if(typeof v==='string')v=v.trim();collected[f.name]=v===''?null:v;}
+    const missing=fields.find(f=>f.required&&!collected[f.name]);
+    if(missing){errorBox.textContent=`${missing.label} is required.`;errorBox.style.display='block';inputs[missing.name].focus();return;}
+    submitBtn.disabled=true;submitBtn.textContent='Saving…';
+    try{await onSubmit(collected);closeModal();}
+    catch(err){errorBox.textContent=err.message||'Something went wrong.';errorBox.style.display='block';submitBtn.disabled=false;submitBtn.textContent=submitLabel;}
+  }},...rows,errorBox,
+    el('div',{class:'modal-actions'},
+      el('button',{class:'btn btn-ghost',type:'button',onclick:closeModal},'Cancel'),submitBtn));
+  openShell(title,form,{wide});
+  const first=fields[0]&&inputs[fields[0].name];if(first)setTimeout(()=>first.focus(),50);
+}
+
+/* ============================================================================
+   STORE — in-memory data + persistence to file/localStorage
+   ========================================================================== */
+const LS_KEY='offeringbook:data';
+const EMPTY=()=>({meta:{version:1,app:'OfferingBook'},seq:{offerings:0,investors:0,subscriptions:0,escrow:0,tasks:0,reconciliations:0},
+  offerings:[],investors:[],subscriptions:[],escrow:[],tasks:[],reconciliations:[]});
+let db=EMPTY();
+let fileHandle=null;
+let fileName=null;
+
+function normalize(obj){
+  const base=EMPTY();
+  const out={...base,...obj,meta:{...base.meta,...(obj.meta||{})},seq:{...base.seq,...(obj.seq||{})}};
+  for(const k of['offerings','investors','subscriptions','escrow','tasks','reconciliations'])
+    if(!Array.isArray(out[k]))out[k]=[];
+  // keep seq counters ahead of any existing ids
+  for(const k of['offerings','investors','subscriptions','escrow','tasks','reconciliations']){
+    const maxId=out[k].reduce((m,r)=>Math.max(m,r.id||0),0);
+    out.seq[k]=Math.max(out.seq[k]||0,maxId);
+  }
+  return out;
+}
+function parseDB(text){
+  const obj=JSON.parse(text);
+  if(typeof obj!=='object'||obj===null)throw new Error('Not a valid OfferingBook file');
+  return normalize(obj);
+}
+function nextId(kind){db.seq[kind]=(db.seq[kind]||0)+1;return db.seq[kind];}
+
+/* Persistence */
+let saveTimer=null;
+function serialize(){return JSON.stringify(db,null,2);}
+async function persist(){
+  try{localStorage.setItem(LS_KEY,serialize());}catch{}
+  if(fileHandle){
+    setSaveState('saving');
+    clearTimeout(saveTimer);
+    // small debounce to coalesce rapid edits, then write
+    await new Promise(res=>{saveTimer=setTimeout(res,250);});
+    try{
+      const w=await fileHandle.createWritable();
+      await w.write(new Blob([serialize()],{type:'application/json'}));
+      await w.close();
+      setSaveState('saved');
+    }catch(e){setSaveState('error');toast('Could not save to your data file: '+e.message,'error');}
+  }else{
+    setSaveState('local');
+  }
+}
+
+/* IndexedDB (just to remember the chosen file between sessions) */
+function idbOpen(){return new Promise((res,rej)=>{const r=indexedDB.open('offeringbook',1);
+  r.onupgradeneeded=()=>r.result.createObjectStore('kv');r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error);});}
+async function idbSet(k,v){try{const d=await idbOpen();return await new Promise((res,rej)=>{const t=d.transaction('kv','readwrite');t.objectStore('kv').put(v,k);t.oncomplete=()=>res();t.onerror=()=>rej(t.error);});}catch{}}
+async function idbGet(k){try{const d=await idbOpen();return await new Promise((res,rej)=>{const t=d.transaction('kv','readonly');const rq=t.objectStore('kv').get(k);rq.onsuccess=()=>res(rq.result);rq.onerror=()=>rej(rq.error);});}catch{return null;}}
+
+const FSA='showSaveFilePicker'in window;
+async function verifyPermission(handle,rw){
+  const opts={mode:rw?'readwrite':'read'};
+  if((await handle.queryPermission(opts))==='granted')return true;
+  if((await handle.requestPermission(opts))==='granted')return true;
+  return false;
+}
+async function newDataFile(){
+  try{
+    const h=await window.showSaveFilePicker({suggestedName:'offeringbook-data.json',
+      types:[{description:'OfferingBook data',accept:{'application/json':['.json']}}]});
+    fileHandle=h;fileName=h.name;await persist();await idbSet('fileHandle',h);renderFileStatus();
+    toast('Data file created — your changes now save here.','success');
+  }catch(e){if(e.name!=='AbortError')toast('Could not create file: '+e.message,'error');}
+}
+async function openDataFile(){
+  try{
+    const[h]=await window.showOpenFilePicker({types:[{description:'OfferingBook data',accept:{'application/json':['.json']}}]});
+    if(!(await verifyPermission(h,true)))throw new Error('Permission to the file was denied.');
+    const text=await(await h.getFile()).text();
+    const parsed=parseDB(text);
+    if(hasData(db)){
+      const ok=await confirmDialog('Opening this file will replace the data currently loaded in this browser. Your other data file (if any) is not affected. Continue?',{danger:true,confirmLabel:'Open file'});
+      if(!ok)return;
+    }
+    db=parsed;fileHandle=h;fileName=h.name;await persist();await idbSet('fileHandle',h);renderFileStatus();refresh();
+    toast('Data file opened.','success');
+  }catch(e){if(e.name!=='AbortError')toast('Could not open file: '+e.message,'error');}
+}
+async function reopenFromHandle(h){
+  try{
+    if(!(await verifyPermission(h,true))){toast('Permission to the file was denied.','error');return;}
+    const text=await(await h.getFile()).text();
+    db=parseDB(text);fileHandle=h;fileName=h.name;await persist();renderFileStatus();refresh();
+    toast('Reconnected to '+h.name,'success');
+  }catch(e){toast('Could not reopen file: '+e.message+' — it may have moved.','error');}
+}
+function disconnectFile(){fileHandle=null;fileName=null;idbSet('fileHandle',null);renderFileStatus();toast('Disconnected. Changes are still kept in this browser.','info');}
+function stamp(){return new Date().toISOString().replace(/[:.]/g,'-').slice(0,19);}
+function downloadCopy(){
+  const blob=new Blob([serialize()],{type:'application/json'});const url=URL.createObjectURL(blob);
+  const a=el('a',{href:url,download:`offeringbook-backup-${stamp()}.json`});document.body.appendChild(a);a.click();a.remove();
+  URL.revokeObjectURL(url);toast('Backup copy downloaded.','success');
+}
+function importFile(){
+  const inp=el('input',{type:'file',accept:'.json,application/json'});
+  inp.onchange=async()=>{const f=inp.files[0];if(!f)return;
+    try{const parsed=parseDB(await f.text());
+      if(hasData(db)&&!(await confirmDialog('Importing will replace the data currently loaded. Continue?',{danger:true,confirmLabel:'Import'})))return;
+      db=parsed;await persist();renderFileStatus();refresh();toast('Data imported.','success');
+    }catch(e){toast('Import failed: '+e.message,'error');}};
+  inp.click();
+}
+function hasData(d){return d.offerings.length||d.investors.length;}
+
+let pendingHandle=null;
+function setSaveState(s){
+  const dot=document.querySelector('#file-status .dot');const lbl=document.querySelector('#file-status .save-label');
+  if(!dot||!lbl)return;
+  dot.className='dot '+s;
+  lbl.textContent={saving:'Saving…',saved:'Saved to file',error:'Save failed',local:'Saved in this browser'}[s]||'';
+}
+function renderFileStatus(){
+  const root=document.getElementById('file-status');clear(root);
+  if(fileHandle){
+    root.appendChild(el('div',{class:'file-line'},el('span',{class:'dot saved'}),el('span',{class:'file-name',title:fileName},fileName)));
+    root.appendChild(el('div',{class:'file-sub save-label'},'Saved to file'));
+    root.appendChild(el('div',{class:'file-btns'},
+      el('button',{class:'mini-btn',onclick:downloadCopy},'Save a copy'),
+      el('button',{class:'mini-btn',onclick:disconnectFile},'Disconnect')));
+  }else if(pendingHandle){
+    root.appendChild(el('div',{class:'file-line'},el('span',{class:'dot local'}),el('span',{class:'file-name'},'Not connected')));
+    root.appendChild(el('div',{class:'file-sub'},'Changes are kept in this browser.'));
+    root.appendChild(el('div',{class:'file-btns'},
+      el('button',{class:'mini-btn',onclick:()=>reopenFromHandle(pendingHandle)},'Reconnect '+truncate(pendingHandle.name,16)),
+      FSA?el('button',{class:'mini-btn',onclick:openDataFile},'Open…'):null));
+  }else{
+    root.appendChild(el('div',{class:'file-line'},el('span',{class:'dot local'}),el('span',{class:'file-name save-label'},'Saved in this browser')));
+    if(FSA){
+      root.appendChild(el('div',{class:'file-sub'},'Connect a data file to save it on your computer.'));
+      root.appendChild(el('div',{class:'file-btns'},
+        el('button',{class:'mini-btn',onclick:newDataFile},'New file…'),
+        el('button',{class:'mini-btn',onclick:openDataFile},'Open file…'),
+        el('button',{class:'mini-btn',onclick:downloadCopy},'Save a copy')));
+    }else{
+      root.appendChild(el('div',{class:'file-sub'},'This browser can’t save to a chosen file. Use Save a copy / Import.'));
+      root.appendChild(el('div',{class:'file-btns'},
+        el('button',{class:'mini-btn',onclick:downloadCopy},'Save a copy'),
+        el('button',{class:'mini-btn',onclick:importFile},'Import…')));
+    }
+  }
+}
+function truncate(s,n){return s.length>n?s.slice(0,n-1)+'…':s;}
+
+/* ---- Computed summaries ------------------------------------------------- */
+const SIGN={deposit:1,release:-1,refund:-1,fee:-1};
+function escrowSummary(offeringId){
+  const rows=db.escrow.filter(e=>e.offering_id===offeringId);
+  const by={deposit:0,release:0,refund:0,fee:0},cl={deposit:0,release:0,refund:0,fee:0};
+  for(const r of rows){if(r.txn_type in by){by[r.txn_type]+=r.amount_cents;if(r.cleared)cl[r.txn_type]+=r.amount_cents;}}
+  const book=by.deposit*SIGN.deposit+by.release*SIGN.release+by.refund*SIGN.refund+by.fee*SIGN.fee;
+  const cleared=cl.deposit*SIGN.deposit+cl.release*SIGN.release+cl.refund*SIGN.refund+cl.fee*SIGN.fee;
+  return{deposits:by.deposit,releases:by.release,refunds:by.refund,fees:by.fee,clearedDeposits:cl.deposit,
+    bookBalance:book,clearedBalance:cleared,pendingBalance:book-cleared};
+}
+function subscriptionSummary(offeringId){
+  const subs=db.subscriptions.filter(s=>s.offering_id===offeringId);
+  const committed=subs.reduce((a,s)=>a+(s.amount_committed_cents||0),0);
+  const signed=subs.filter(s=>['Sub signed','Funded','Closed'].includes(s.status)).reduce((a,s)=>a+(s.amount_committed_cents||0),0);
+  return{investorCount:subs.length,committed,signedCommitted:signed};
+}
+function daysUntil(dateStr,today=new Date()){
+  if(!dateStr)return null;const t=new Date(dateStr+'T00:00:00');if(isNaN(t))return null;
+  const t0=new Date(today.getFullYear(),today.getMonth(),today.getDate());
+  return Math.round((t-t0)/86400000);
+}
+function offeringSummary(o){
+  const escrow=escrowSummary(o.id),subs=subscriptionSummary(o.id);
+  const targetMin=o.target_min_cents||0;
+  const minRaiseMet=targetMin>0&&escrow.clearedDeposits>=targetMin;
+  const minRaisePct=targetMin>0?Math.min(100,Math.round((escrow.clearedDeposits/targetMin)*100)):null;
+  const tasks=db.tasks.filter(t=>t.offering_id===o.id);
+  return{escrow,subscriptions:subs,minRaiseMet,minRaisePct,daysToFinalClose:daysUntil(o.final_close_date),
+    tasksTotal:tasks.length,tasksDone:tasks.filter(t=>t.done).length};
+}
+
+/* ---- Local API (mirrors the old server shapes) -------------------------- */
+function offeringFromBody(b){return{
+  name:str(b.name),issuer_name:str(b.issuer_name),exemption:str(b.exemption),security_type:str(b.security_type),
+  status:str(b.status)||'Drafting',target_min_cents:dollarsToCents(b.target_min),target_max_cents:dollarsToCents(b.target_max),
+  price_per_unit_cents:dollarsToCents(b.price_per_unit),min_investment_cents:dollarsToCents(b.min_investment),
+  launch_date:str(b.launch_date),first_close_date:str(b.first_close_date),final_close_date:str(b.final_close_date),
+  form_d_filed_date:str(b.form_d_filed_date),escrow_agent:str(b.escrow_agent),escrow_bank:str(b.escrow_bank),
+  escrow_account_number:str(b.escrow_account_number),notes:str(b.notes)};}
+function investorFromBody(b){return{
+  name:str(b.name),entity_type:str(b.entity_type)||'Individual',contact_name:str(b.contact_name),email:str(b.email),
+  phone:str(b.phone),address:str(b.address),accredited_status:str(b.accredited_status)||'Unknown',
+  accredited_verified_date:str(b.accredited_verified_date),notes:str(b.notes)};}
+function subFromBody(b){return{
+  investor_id:numOr(b.investor_id),amount_committed_cents:dollarsToCents(b.amount_committed),units:numOr(b.units),
+  status:str(b.status)||'Prospect',sub_sent_date:str(b.sub_sent_date),sub_signed_date:str(b.sub_signed_date),notes:str(b.notes)};}
+function escrowFromBody(b){const type=str(b.txn_type)||'deposit';const valid=['deposit','release','refund','fee'];
+  return{investor_id:numOr(b.investor_id),txn_type:valid.includes(type)?type:'deposit',
+    amount_cents:Math.abs(dollarsToCents(b.amount)||0),txn_date:str(b.txn_date),method:str(b.method),
+    reference:str(b.reference),cleared:b.cleared?1:0,notes:str(b.notes)};}
+
+const api={
+  async dashboard(){
+    const os=db.offerings;const byStatus={};let inEscrow=0,committed=0,minMet=0,active=0;const upcoming=[];
+    for(const o of os){const s=offeringSummary(o);byStatus[o.status]=(byStatus[o.status]||0)+1;
+      inEscrow+=s.escrow.clearedBalance;committed+=s.subscriptions.committed;if(s.minRaiseMet)minMet++;
+      if(!['Closed','Terminated'].includes(o.status))active++;
+      const d=daysUntil(o.final_close_date);
+      if(d!==null&&d>=0&&!['Closed','Terminated'].includes(o.status))
+        upcoming.push({id:o.id,name:o.name,final_close_date:o.final_close_date,days:d,minRaiseMet:s.minRaiseMet});}
+    upcoming.sort((a,b)=>a.days-b.days);
+    return{offeringCount:os.length,activeCount:active,investorCount:db.investors.length,totalInEscrow:inEscrow,
+      totalCommitted:committed,minRaiseMetCount:minMet,byStatus,upcomingClosings:upcoming.slice(0,8)};
+  },
+  async listOfferings(){return db.offerings.slice().sort((a,b)=>(b.created_at||'').localeCompare(a.created_at||'')).map(o=>({...o,summary:offeringSummary(o)}));},
+  async getOffering(id){id=Number(id);const o=db.offerings.find(x=>x.id===id);if(!o)throw new Error('Offering not found');return{...o,summary:offeringSummary(o)};},
+  async createOffering(b){const row=offeringFromBody(b);if(!row.name)throw new Error('Offering name is required');
+    const o={id:nextId('offerings'),...row,created_at:nowISO(),updated_at:nowISO()};db.offerings.push(o);
+    DEFAULT_CHECKLIST.forEach((label,i)=>db.tasks.push({id:nextId('tasks'),offering_id:o.id,label,done:0,due_date:null,sort_order:i,created_at:nowISO()}));
+    await persist();return{...o,summary:offeringSummary(o)};},
+  async updateOffering(id,b){id=Number(id);const o=db.offerings.find(x=>x.id===id);if(!o)throw new Error('Offering not found');
+    const row=offeringFromBody(b);if(!row.name)throw new Error('Offering name is required');Object.assign(o,row,{updated_at:nowISO()});
+    await persist();return{...o,summary:offeringSummary(o)};},
+  async deleteOffering(id){id=Number(id);
+    db.offerings=db.offerings.filter(x=>x.id!==id);db.subscriptions=db.subscriptions.filter(x=>x.offering_id!==id);
+    db.escrow=db.escrow.filter(x=>x.offering_id!==id);db.tasks=db.tasks.filter(x=>x.offering_id!==id);
+    db.reconciliations=db.reconciliations.filter(x=>x.offering_id!==id);await persist();return{ok:true};},
+
+  async listInvestors(){return db.investors.slice().sort((a,b)=>a.name.localeCompare(b.name,undefined,{sensitivity:'base'}))
+    .map(i=>({...i,offering_count:db.subscriptions.filter(s=>s.investor_id===i.id).length}));},
+  async getInvestor(id){id=Number(id);const inv=db.investors.find(x=>x.id===id);if(!inv)throw new Error('Investor not found');
+    const subscriptions=db.subscriptions.filter(s=>s.investor_id===id).map(s=>{
+      const o=db.offerings.find(x=>x.id===s.offering_id);return{...s,offering_name:o?o.name:'(deleted)'};})
+      .sort((a,b)=>a.offering_name.localeCompare(b.offering_name));
+    return{...inv,subscriptions};},
+  async createInvestor(b){const row=investorFromBody(b);if(!row.name)throw new Error('Investor name is required');
+    const inv={id:nextId('investors'),...row,created_at:nowISO(),updated_at:nowISO()};db.investors.push(inv);await persist();return inv;},
+  async updateInvestor(id,b){id=Number(id);const inv=db.investors.find(x=>x.id===id);if(!inv)throw new Error('Investor not found');
+    const row=investorFromBody(b);if(!row.name)throw new Error('Investor name is required');Object.assign(inv,row,{updated_at:nowISO()});await persist();return inv;},
+  async deleteInvestor(id){id=Number(id);const n=db.subscriptions.filter(s=>s.investor_id===id).length;
+    if(n>0)throw new Error(`This investor is on ${n} offering subscription(s). Remove those first.`);
+    db.investors=db.investors.filter(x=>x.id!==id);db.escrow.forEach(e=>{if(e.investor_id===id)e.investor_id=null;});await persist();return{ok:true};},
+
+  async listSubscriptions(offeringId){offeringId=Number(offeringId);
+    return db.subscriptions.filter(s=>s.offering_id===offeringId).map(s=>{const i=db.investors.find(x=>x.id===s.investor_id)||{};
+      return{...s,investor_name:i.name,entity_type:i.entity_type,email:i.email,phone:i.phone,accredited_status:i.accredited_status};})
+      .sort((a,b)=>(a.investor_name||'').localeCompare(b.investor_name||''));},
+  async createSubscription(offeringId,b){offeringId=Number(offeringId);const row=subFromBody(b);
+    if(!row.investor_id)throw new Error('Investor is required');if(!db.investors.find(x=>x.id===row.investor_id))throw new Error('Investor not found');
+    const s={id:nextId('subscriptions'),offering_id:offeringId,...row,created_at:nowISO(),updated_at:nowISO()};db.subscriptions.push(s);await persist();return s;},
+  async updateSubscription(id,b){id=Number(id);const s=db.subscriptions.find(x=>x.id===id);if(!s)throw new Error('Subscription not found');
+    const row=subFromBody(b);if(!row.investor_id)throw new Error('Investor is required');Object.assign(s,row,{updated_at:nowISO()});await persist();return s;},
+  async deleteSubscription(id){id=Number(id);db.subscriptions=db.subscriptions.filter(x=>x.id!==id);await persist();return{ok:true};},
+
+  async listEscrow(offeringId){offeringId=Number(offeringId);
+    const transactions=db.escrow.filter(e=>e.offering_id===offeringId).map(e=>{const i=db.investors.find(x=>x.id===e.investor_id);
+      return{...e,investor_name:i?i.name:null};})
+      .sort((a,b)=>(b.txn_date||b.created_at||'').localeCompare(a.txn_date||a.created_at||'')||b.id-a.id);
+    return{transactions,summary:escrowSummary(offeringId)};},
+  async createEscrow(offeringId,b){offeringId=Number(offeringId);const row=escrowFromBody(b);
+    if(!row.amount_cents)throw new Error('Amount must be greater than zero');
+    const e={id:nextId('escrow'),offering_id:offeringId,...row,created_at:nowISO()};db.escrow.push(e);await persist();return e;},
+  async updateEscrow(id,b){id=Number(id);const e=db.escrow.find(x=>x.id===id);if(!e)throw new Error('Transaction not found');
+    const row=escrowFromBody(b);if(!row.amount_cents)throw new Error('Amount must be greater than zero');Object.assign(e,row);await persist();return e;},
+  async deleteEscrow(id){id=Number(id);db.escrow=db.escrow.filter(x=>x.id!==id);await persist();return{ok:true};},
+
+  async listTasks(offeringId){offeringId=Number(offeringId);return db.tasks.filter(t=>t.offering_id===offeringId).sort((a,b)=>a.sort_order-b.sort_order||a.id-b.id);},
+  async createTask(offeringId,b){offeringId=Number(offeringId);const label=str(b.label);if(!label)throw new Error('Task label is required');
+    const order=db.tasks.filter(t=>t.offering_id===offeringId).reduce((m,t)=>Math.max(m,t.sort_order),-1)+1;
+    const t={id:nextId('tasks'),offering_id:offeringId,label,done:0,due_date:str(b.due_date),sort_order:order,created_at:nowISO()};db.tasks.push(t);await persist();return t;},
+  async updateTask(id,b){id=Number(id);const t=db.tasks.find(x=>x.id===id);if(!t)throw new Error('Task not found');
+    if('label'in b&&str(b.label))t.label=str(b.label);if('done'in b)t.done=b.done?1:0;if('due_date'in b)t.due_date=str(b.due_date);
+    if('sort_order'in b)t.sort_order=numOr(b.sort_order,t.sort_order);await persist();return t;},
+  async deleteTask(id){id=Number(id);db.tasks=db.tasks.filter(x=>x.id!==id);await persist();return{ok:true};},
+
+  async listReconciliations(offeringId){offeringId=Number(offeringId);const summary=escrowSummary(offeringId);
+    const reconciliations=db.reconciliations.filter(r=>r.offering_id===offeringId)
+      .sort((a,b)=>(b.statement_date||b.created_at||'').localeCompare(a.statement_date||a.created_at||'')||b.id-a.id)
+      .map(r=>({...r,difference_cents:r.statement_balance_cents-summary.clearedBalance}));
+    return{reconciliations,summary};},
+  async createReconciliation(offeringId,b){offeringId=Number(offeringId);const bal=dollarsToCents(b.statement_balance);
+    if(bal===null)throw new Error('Statement balance is required');
+    const r={id:nextId('reconciliations'),offering_id:offeringId,statement_date:str(b.statement_date),statement_balance_cents:bal,notes:str(b.notes),created_at:nowISO()};
+    db.reconciliations.push(r);await persist();return r;},
+  async deleteReconciliation(id){id=Number(id);db.reconciliations=db.reconciliations.filter(x=>x.id!==id);await persist();return{ok:true};},
+};
+
+/* ============================================================================
+   FORMS (open modal → call api)
+   ========================================================================== */
+function openOfferingForm(existing,onDone){
+  const isEdit=!!existing;
+  formModal({title:isEdit?'Edit offering':'New offering',wide:true,submitLabel:isEdit?'Save changes':'Create offering',
+    values:existing?{name:existing.name,issuer_name:existing.issuer_name,exemption:existing.exemption,security_type:existing.security_type,
+      status:existing.status,target_min:centsToInput(existing.target_min_cents),target_max:centsToInput(existing.target_max_cents),
+      price_per_unit:centsToInput(existing.price_per_unit_cents),min_investment:centsToInput(existing.min_investment_cents),
+      launch_date:existing.launch_date,first_close_date:existing.first_close_date,final_close_date:existing.final_close_date,
+      form_d_filed_date:existing.form_d_filed_date,escrow_agent:existing.escrow_agent,escrow_bank:existing.escrow_bank,
+      escrow_account_number:existing.escrow_account_number,notes:existing.notes}:{status:'Drafting'},
+    fields:[
+      {name:'name',label:'Offering name',required:true,placeholder:'e.g. Acme Fund I'},
+      {name:'issuer_name',label:'Issuer / client',half:true,placeholder:'Issuing entity'},
+      {name:'status',label:'Status',type:'select',options:OFFERING_STATUSES,half:true},
+      {name:'exemption',label:'Exemption',type:'select',options:['',...EXEMPTIONS],half:true},
+      {name:'security_type',label:'Security type',type:'select',options:['',...SECURITY_TYPES],half:true},
+      {name:'target_min',label:'Minimum raise (min-raise)',type:'money',half:true,help:'Escrow must reach this before a closing.'},
+      {name:'target_max',label:'Maximum raise',type:'money',half:true},
+      {name:'price_per_unit',label:'Price per unit',type:'money',half:true},
+      {name:'min_investment',label:'Minimum investment',type:'money',half:true},
+      {name:'launch_date',label:'Launch date',type:'date',half:true},
+      {name:'form_d_filed_date',label:'Form D filed',type:'date',half:true},
+      {name:'first_close_date',label:'First / interim close',type:'date',half:true},
+      {name:'final_close_date',label:'Final close deadline',type:'date',half:true},
+      {name:'escrow_agent',label:'Escrow agent',half:true,placeholder:'Escrow company'},
+      {name:'escrow_bank',label:'Escrow bank',half:true},
+      {name:'escrow_account_number',label:'Escrow account #',half:true},
+      {name:'notes',label:'Notes',type:'textarea'}],
+    onSubmit:async v=>{const saved=isEdit?await api.updateOffering(existing.id,v):await api.createOffering(v);
+      toast(isEdit?'Offering updated.':'Offering created.','success');onDone?.(saved);}});
+}
+function openInvestorForm(existing,onDone){
+  const isEdit=!!existing;
+  formModal({title:isEdit?'Edit investor':'New investor',wide:true,submitLabel:isEdit?'Save changes':'Add investor',
+    values:existing||{entity_type:'Individual',accredited_status:'Unknown'},
+    fields:[
+      {name:'name',label:'Name',required:true,placeholder:'Investor or entity name'},
+      {name:'entity_type',label:'Type',type:'select',options:ENTITY_TYPES,half:true},
+      {name:'contact_name',label:'Contact person',half:true,help:'For entities/trusts'},
+      {name:'email',label:'Email',type:'email',half:true},
+      {name:'phone',label:'Phone',type:'tel',half:true},
+      {name:'accredited_status',label:'Accredited status',type:'select',options:ACCREDITED_STATUSES,half:true},
+      {name:'accredited_verified_date',label:'Verified on',type:'date',half:true},
+      {name:'address',label:'Address',type:'textarea',rows:2},
+      {name:'notes',label:'Notes',type:'textarea'}],
+    onSubmit:async v=>{const saved=isEdit?await api.updateInvestor(existing.id,v):await api.createInvestor(v);
+      toast(isEdit?'Investor updated.':'Investor added.','success');onDone?.(saved);}});
+}
+function openSubscriptionForm(offeringId,investors,existing,onDone){
+  const isEdit=!!existing;
+  formModal({title:isEdit?'Edit subscription':'Add investor to offering',submitLabel:isEdit?'Save changes':'Add',
+    values:existing?{investor_id:existing.investor_id,amount_committed:centsToInput(existing.amount_committed_cents),
+      units:existing.units??'',status:existing.status,sub_sent_date:existing.sub_sent_date,sub_signed_date:existing.sub_signed_date,notes:existing.notes}:{status:'Prospect'},
+    fields:[
+      {name:'investor_id',label:'Investor',type:'select',required:true,
+        options:[{value:'',label:'— Select investor —'},...investors.map(i=>({value:i.id,label:i.name}))],
+        help:investors.length?null:'Add investors on the Investors tab first.'},
+      {name:'amount_committed',label:'Amount committed',type:'money',half:true},
+      {name:'units',label:'Units',type:'number',half:true,step:'any'},
+      {name:'status',label:'Status',type:'select',options:SUBSCRIPTION_STATUSES,half:true},
+      {name:'sub_sent_date',label:'Sub agreement sent',type:'date',half:true},
+      {name:'sub_signed_date',label:'Sub agreement signed',type:'date',half:true},
+      {name:'notes',label:'Notes',type:'textarea'}],
+    onSubmit:async v=>{if(isEdit)await api.updateSubscription(existing.id,v);else await api.createSubscription(offeringId,v);
+      toast(isEdit?'Subscription updated.':'Investor added to offering.','success');onDone?.();}});
+}
+function openEscrowForm(offeringId,investors,existing,onDone){
+  const isEdit=!!existing;
+  formModal({title:isEdit?'Edit escrow entry':'New escrow entry',submitLabel:isEdit?'Save changes':'Add entry',
+    values:existing?{txn_type:existing.txn_type,investor_id:existing.investor_id??'',amount:centsToInput(existing.amount_cents),
+      txn_date:existing.txn_date,method:existing.method,reference:existing.reference,cleared:existing.cleared?'yes':'no',notes:existing.notes}:{txn_type:'deposit',cleared:'no'},
+    fields:[
+      {name:'txn_type',label:'Type',type:'select',options:TXN_TYPES,half:true},
+      {name:'amount',label:'Amount',type:'money',required:true,half:true},
+      {name:'investor_id',label:'Investor',type:'select',
+        options:[{value:'',label:'— None (issuer / fee) —'},...investors.map(i=>({value:i.id,label:i.name}))],
+        help:'Link deposits/refunds to the investor; leave blank for releases and fees.',half:true},
+      {name:'txn_date',label:'Date',type:'date',half:true},
+      {name:'method',label:'Method',type:'select',options:['',...PAYMENT_METHODS],half:true},
+      {name:'cleared',label:'Cleared at bank?',type:'select',options:[{value:'no',label:'Pending'},{value:'yes',label:'Cleared'}],half:true},
+      {name:'reference',label:'Reference / check #',half:true},
+      {name:'notes',label:'Notes',type:'textarea'}],
+    onSubmit:async v=>{const payload={...v,cleared:v.cleared==='yes'};
+      if(isEdit)await api.updateEscrow(existing.id,payload);else await api.createEscrow(offeringId,payload);
+      toast('Escrow entry saved.','success');onDone?.();}});
+}
+
+/* ============================================================================
+   VIEWS
+   ========================================================================== */
+async function renderDashboard(){
+  const[d,offerings]=await Promise.all([api.dashboard(),api.listOfferings()]);
+  const newBtn=el('button',{class:'btn btn-primary',onclick:()=>openOfferingForm(null,o=>navigate(`/offerings/${o.id}`))},'+ New offering');
+  const showWelcome=!offerings.length&&!db.investors.length;
+  return el('div',{class:'view-dashboard'},
+    pageHeader('Dashboard',{subtitle:'Your practice at a glance.',actions:[newBtn]}),
+    showWelcome?welcomePanel():null,
+    el('div',{class:'stat-row'},
+      statCard('Active offerings',d.activeCount,{sub:`${d.offeringCount} total`}),
+      statCard('In escrow (cleared)',moneyShort(d.totalInEscrow),{kind:'accent',sub:'across all offerings'}),
+      statCard('Total committed',moneyShort(d.totalCommitted),{sub:'subscribed by investors'}),
+      statCard('Investors',d.investorCount,{sub:'in your contact book'}),
+      statCard('Min-raise met',d.minRaiseMetCount,{kind:d.minRaiseMetCount?'success':undefined,sub:'offerings cleared to close'})),
+    el('div',{class:'dash-cols'},
+      el('section',{class:'panel'},el('h2',{class:'panel-title'},'Upcoming closings'),
+        !d.upcomingClosings.length?emptyState('No closing deadlines set.'):
+        el('ul',{class:'closing-list'},...d.upcomingClosings.map(c=>el('li',{class:'closing-item'+(c.days<=14?' urgent':''),onclick:()=>navigate(`/offerings/${c.id}`)},
+          el('div',{class:'closing-main'},el('span',{class:'closing-name'},c.name),el('span',{class:'closing-date'},`${fmtDate(c.final_close_date)} · ${relDays(c.days)}`)),
+          c.minRaiseMet?pill('Min-raise met','success'):pill('Below min-raise','warn'))))),
+      el('section',{class:'panel'},el('h2',{class:'panel-title'},'Offerings'),
+        !offerings.length?emptyState('No offerings yet — create your first one.'):
+        el('ul',{class:'mini-list'},...offerings.slice(0,8).map(o=>el('li',{class:'mini-item',onclick:()=>navigate(`/offerings/${o.id}`)},
+          el('div',{class:'mini-main'},el('span',{class:'mini-name'},o.name),el('span',{class:'mini-meta'},o.issuer_name||'—')),
+          el('div',{class:'mini-right'},el('span',{class:'mini-escrow'},money(o.summary.escrow.clearedBalance)),pill(o.status,OFFERING_STATUS_KIND[o.status]||'default'))))))));
+}
+function welcomePanel(){
+  return el('div',{class:'welcome'},el('section',{class:'panel'},
+    el('h2',{},'Welcome to OfferingBook'),
+    el('p',{class:'muted-text'},'Track your private placement offerings, investors, and escrow funds — all on your own computer. Nothing is sent anywhere.'),
+    FSA?el('div',{},
+      el('p',{},'Your data is currently kept in this browser. To store it in a file on your computer (recommended, so you can back it up and move it between machines), connect a data file:'),
+      el('div',{class:'welcome-actions'},
+        el('button',{class:'btn btn-primary',onclick:newDataFile},'Create a data file…'),
+        el('button',{class:'btn btn-ghost',onclick:openDataFile},'Open an existing file…'))):
+      el('div',{class:'browser-warn'},'This browser doesn’t support saving to a chosen file. Your data is kept in this browser — use “Save a copy” regularly to back it up, and “Import” to restore. For the full experience, open this file in Google Chrome or Microsoft Edge.')));
+}
+
+async function renderOfferings(){
+  const offerings=await api.listOfferings();
+  const newBtn=el('button',{class:'btn btn-primary',onclick:()=>openOfferingForm(null,o=>navigate(`/offerings/${o.id}`))},'+ New offering');
+  return el('div',{},pageHeader('Offerings',{subtitle:`${offerings.length} offering${offerings.length===1?'':'s'}`,actions:[newBtn]}),
+    !offerings.length?emptyState('No offerings yet.',el('button',{class:'btn btn-primary',onclick:()=>openOfferingForm(null,o=>navigate(`/offerings/${o.id}`))},'Create your first offering')):
+    el('div',{class:'card-grid'},...offerings.map(offeringCard)));
+}
+function offeringCard(o){
+  const s=o.summary,days=s.daysToFinalClose;
+  return el('div',{class:'offering-card',onclick:()=>navigate(`/offerings/${o.id}`)},
+    el('div',{class:'oc-head'},el('div',{},el('h3',{class:'oc-name'},o.name),el('div',{class:'oc-issuer'},o.issuer_name||'—')),pill(o.status,OFFERING_STATUS_KIND[o.status]||'default')),
+    el('div',{class:'oc-tags'},o.exemption?el('span',{class:'tag'},o.exemption):null,o.security_type?el('span',{class:'tag'},o.security_type):null),
+    el('div',{class:'oc-escrow'},el('div',{},el('span',{class:'oc-escrow-val'},money(s.escrow.clearedBalance)),el('span',{class:'oc-escrow-lbl'},' in escrow')),
+      o.target_min_cents?el('span',{class:`oc-minraise ${s.minRaiseMet?'met':''}`},s.minRaiseMet?'✓ Min-raise met':`${s.minRaisePct}% of min`):null),
+    o.target_min_cents?progressBar(s.minRaisePct,{met:s.minRaiseMet}):null,
+    el('div',{class:'oc-foot'},el('span',{},`${s.subscriptions.investorCount} investor${s.subscriptions.investorCount===1?'':'s'}`),
+      days!==null&&!['Closed','Terminated'].includes(o.status)?el('span',{class:days<=14&&days>=0?'urgent-text':''},`Close ${relDays(days)}`):el('span',{},fmtDate(o.final_close_date))));
+}
+
+const TABS=['Overview','Investors','Escrow','Checklist','Reconciliation'];
+async function renderOffering(id){
+  const[offering,investors]=await Promise.all([api.getOffering(id),api.listInvestors()]);
+  const state={offering,investors,tab:currentTab()};
+  const tabContent=el('div',{class:'tab-content'});
+  const tabBar=el('nav',{class:'tab-bar'},...TABS.map(t=>el('button',{class:'tab'+(t===state.tab?' active':''),onclick:()=>selectTab(t)},t)));
+  function selectTab(t){state.tab=t;history.replaceState(null,'',`#/offerings/${id}`+(t==='Overview'?'':`?tab=${t}`));
+    tabBar.querySelectorAll('.tab').forEach(b=>b.classList.toggle('active',b.textContent===t));drawTab();}
+  async function reloadOffering(){state.offering=await api.getOffering(id);const nh=buildHeader();header.replaceWith(nh);header=nh;}
+  async function drawTab(){clear(tabContent);tabContent.appendChild(el('div',{class:'loading'},'Loading…'));
+    const render={Overview:()=>overviewTab(state),Investors:()=>investorsTab(state,drawTab,reloadOffering),
+      Escrow:()=>escrowTab(state,drawTab,reloadOffering),Checklist:()=>checklistTab(state),Reconciliation:()=>reconciliationTab(state)}[state.tab];
+    const node=await render();clear(tabContent);tabContent.appendChild(node);}
+  let header=buildHeader();
+  function buildHeader(){const o=state.offering,s=o.summary;
+    return el('div',{},pageHeader(o.name,{back:{href:'#/offerings',label:'All offerings'},subtitle:o.issuer_name||undefined,
+      actions:[el('button',{class:'btn btn-ghost',onclick:()=>openOfferingForm(o,()=>reloadOffering())},'Edit'),
+        el('button',{class:'btn btn-danger-ghost',onclick:()=>deleteOffering(o)},'Delete')]}),
+      el('div',{class:'offering-summary-row'},
+        el('div',{class:'osr-item'},pill(o.status,OFFERING_STATUS_KIND[o.status]||'default')),
+        o.exemption?el('div',{class:'osr-item'},el('span',{class:'tag'},o.exemption)):null,
+        el('div',{class:'osr-item'},el('strong',{},money(s.escrow.clearedBalance)),el('span',{class:'muted-text'},' in escrow')),
+        o.target_min_cents?el('div',{class:'osr-item'},s.minRaiseMet?pill('Min-raise met','success'):pill(`${s.minRaisePct}% of min-raise`,'warn')):null,
+        s.daysToFinalClose!==null&&!['Closed','Terminated'].includes(o.status)?el('div',{class:'osr-item'+(s.daysToFinalClose<=14&&s.daysToFinalClose>=0?' urgent-text':'')},`Closes ${relDays(s.daysToFinalClose)}`):null));}
+  async function deleteOffering(o){const ok=await confirmDialog(`Delete “${o.name}” and all its investors-on-offering, escrow entries, checklist and reconciliations? This cannot be undone.`,{danger:true,confirmLabel:'Delete offering'});
+    if(!ok)return;await api.deleteOffering(o.id);toast('Offering deleted.','success');navigate('/offerings');}
+  const root=el('div',{class:'view-offering'},header,tabBar,tabContent);drawTab();return root;
+}
+function currentTab(){const m=location.hash.match(/[?&]tab=([^&]+)/);const t=m?decodeURIComponent(m[1]):'Overview';return TABS.includes(t)?t:'Overview';}
+
+function overviewTab(state){
+  const o=state.offering,s=o.summary;
+  return el('div',{class:'grid-2'},
+    el('section',{class:'panel'},el('h2',{class:'panel-title'},'Offering details'),
+      detailGrid([['Issuer / client',o.issuer_name],['Exemption',o.exemption],['Security type',o.security_type],
+        ['Price per unit',o.price_per_unit_cents!=null?money(o.price_per_unit_cents):null],
+        ['Minimum investment',o.min_investment_cents!=null?money(o.min_investment_cents):null],
+        ['Minimum raise',o.target_min_cents!=null?money(o.target_min_cents):null],
+        ['Maximum raise',o.target_max_cents!=null?money(o.target_max_cents):null],
+        ['Launch date',fmtDate(o.launch_date)],['Form D filed',fmtDate(o.form_d_filed_date)],
+        ['First / interim close',fmtDate(o.first_close_date)],['Final close deadline',fmtDate(o.final_close_date)]]),
+      o.notes?el('div',{class:'notes-block'},el('h3',{},'Notes'),el('p',{},o.notes)):null),
+    el('div',{},
+      el('section',{class:'panel'},el('h2',{class:'panel-title'},'Closing readiness'),
+        o.target_min_cents?el('div',{},
+          el('div',{class:'readiness-figures'},el('span',{},`${money(s.escrow.clearedDeposits)} cleared`),el('span',{class:'muted-text'},` of ${money(o.target_min_cents)} minimum`)),
+          progressBar(s.minRaisePct,{met:s.minRaiseMet}),
+          el('div',{class:'readiness-note'},s.minRaiseMet?pill('✓ Minimum raise met — closing can proceed','success'):pill(`${money(o.target_min_cents-s.escrow.clearedDeposits)} more needed to close`,'warn'))):
+          el('p',{class:'muted-text'},'Set a minimum raise on this offering to track closing readiness.')),
+      el('section',{class:'panel'},el('h2',{class:'panel-title'},'Escrow snapshot'),
+        el('div',{class:'stat-row compact'},statCard('Cleared balance',money(s.escrow.clearedBalance),{kind:'accent'}),
+          statCard('Pending',money(s.escrow.pendingBalance)),statCard('Book balance',money(s.escrow.bookBalance))),
+        el('dl',{class:'detail-grid'},el('dt',{},'Escrow agent'),el('dd',{},o.escrow_agent||'—'),
+          el('dt',{},'Escrow bank'),el('dd',{},o.escrow_bank||'—'),el('dt',{},'Account #'),el('dd',{},o.escrow_account_number||'—'))),
+      el('section',{class:'panel'},el('h2',{class:'panel-title'},'Process'),
+        el('div',{class:'progress-inline'},progressBar(s.tasksTotal?Math.round((s.tasksDone/s.tasksTotal)*100):0),
+          el('span',{class:'progress-label'},`${s.tasksDone}/${s.tasksTotal} steps done`)))));
+}
+async function investorsTab(state,drawTab,reloadOffering){
+  const subs=await api.listSubscriptions(state.offering.id);
+  const committed=subs.reduce((a,s)=>a+(s.amount_committed_cents||0),0);
+  const addBtn=el('button',{class:'btn btn-primary',onclick:()=>openSubscriptionForm(state.offering.id,state.investors,null,async()=>{await reloadOffering();drawTab();})},'+ Add investor');
+  return el('div',{},el('div',{class:'section-head'},el('h2',{},`Investors — ${money(committed)} committed`),addBtn),
+    !subs.length?emptyState('No investors on this offering yet.',state.investors.length?null:el('a',{class:'btn btn-ghost',onclick:()=>navigate('/investors')},'Add investors to your contact book first')):
+    el('table',{class:'data-table'},
+      el('thead',{},el('tr',{},el('th',{},'Investor'),el('th',{},'Accredited'),el('th',{},'Status'),el('th',{class:'num'},'Committed'),el('th',{class:'num'},'Units'),el('th',{},'Signed'),el('th',{},''))),
+      el('tbody',{},...subs.map(s=>el('tr',{},
+        el('td',{},el('a',{class:'link',onclick:()=>navigate(`/investors/${s.investor_id}`)},s.investor_name),el('div',{class:'cell-sub'},s.email||s.phone||s.entity_type)),
+        el('td',{},pill(s.accredited_status,ACCREDITED_KIND[s.accredited_status]||'muted')),
+        el('td',{},pill(s.status,SUBSCRIPTION_KIND[s.status]||'muted')),
+        el('td',{class:'num'},money(s.amount_committed_cents)),el('td',{class:'num'},s.units??'—'),el('td',{},fmtDate(s.sub_signed_date)),
+        el('td',{class:'row-actions'},
+          el('button',{class:'icon-btn',title:'Edit',onclick:()=>openSubscriptionForm(state.offering.id,state.investors,s,async()=>{await reloadOffering();drawTab();})},'✎'),
+          el('button',{class:'icon-btn danger',title:'Remove',onclick:async()=>{const ok=await confirmDialog(`Remove ${s.investor_name} from this offering?`,{danger:true,confirmLabel:'Remove'});if(!ok)return;await api.deleteSubscription(s.id);toast('Removed.','success');await reloadOffering();drawTab();}},'🗑')))))));
+}
+async function escrowTab(state,drawTab,reloadOffering){
+  const{transactions,summary}=await api.listEscrow(state.offering.id);
+  const addBtn=el('button',{class:'btn btn-primary',onclick:()=>openEscrowForm(state.offering.id,state.investors,null,async()=>{await reloadOffering();drawTab();})},'+ New entry');
+  return el('div',{},
+    el('div',{class:'stat-row'},statCard('Cleared balance',money(summary.clearedBalance),{kind:'accent',sub:'settled at bank'}),
+      statCard('Pending',money(summary.pendingBalance),{sub:'not yet cleared'}),statCard('Deposits',money(summary.deposits),{kind:'success'}),
+      statCard('Out (release/refund/fee)',money(summary.releases+summary.refunds+summary.fees),{sub:`${money(summary.releases)} released`})),
+    el('div',{class:'section-head'},el('h2',{},'Escrow ledger'),addBtn),
+    !transactions.length?emptyState('No escrow activity recorded yet.'):
+    el('table',{class:'data-table'},
+      el('thead',{},el('tr',{},el('th',{},'Date'),el('th',{},'Type'),el('th',{},'Investor'),el('th',{},'Method / ref'),el('th',{},'Cleared'),el('th',{class:'num'},'Amount'),el('th',{},''))),
+      el('tbody',{},...transactions.map(t=>{const outbound=t.txn_type!=='deposit';
+        return el('tr',{},el('td',{},fmtDate(t.txn_date)),el('td',{},pill(t.txn_type,TXN_KIND[t.txn_type]||'muted')),el('td',{},t.investor_name||'—'),
+          el('td',{},[t.method,t.reference].filter(Boolean).join(' · ')||'—'),
+          el('td',{},el('button',{class:`clear-toggle ${t.cleared?'on':''}`,title:'Toggle cleared',onclick:async()=>{
+            await api.updateEscrow(t.id,{txn_type:t.txn_type,investor_id:t.investor_id,amount:(t.amount_cents/100).toFixed(2),txn_date:t.txn_date,method:t.method,reference:t.reference,cleared:!t.cleared,notes:t.notes});
+            await reloadOffering();drawTab();}},t.cleared?'✓ Cleared':'Pending')),
+          el('td',{class:'num '+(outbound?'neg':'pos')},(outbound?'−':'+')+money(t.amount_cents)),
+          el('td',{class:'row-actions'},
+            el('button',{class:'icon-btn',title:'Edit',onclick:()=>openEscrowForm(state.offering.id,state.investors,t,async()=>{await reloadOffering();drawTab();})},'✎'),
+            el('button',{class:'icon-btn danger',title:'Delete',onclick:async()=>{const ok=await confirmDialog('Delete this escrow entry?',{danger:true,confirmLabel:'Delete'});if(!ok)return;await api.deleteEscrow(t.id);toast('Deleted.','success');await reloadOffering();drawTab();}},'🗑')));}))));
+}
+async function checklistTab(state){
+  const tasks=await api.listTasks(state.offering.id);
+  const list=el('ul',{class:'checklist'});
+  const countLabel=el('span',{class:'count-label'},`${tasks.filter(t=>t.done).length}/${tasks.length} complete`);
+  function updateCount(items){countLabel.textContent=`${items.filter(x=>x.done).length}/${items.length} complete`;}
+  function drawList(items){clear(list);items.forEach(t=>list.appendChild(taskRow(t,items)));}
+  function taskRow(t,items){
+    return el('li',{class:'check-item'+(t.done?' done':'')},
+      el('label',{class:'check-label'},el('input',{type:'checkbox',checked:!!t.done,onchange:async e=>{
+        await api.updateTask(t.id,{done:e.target.checked});t.done=e.target.checked?1:0;
+        e.target.closest('.check-item').classList.toggle('done',!!t.done);updateCount(items);}}),el('span',{class:'check-text'},t.label)),
+      el('div',{class:'check-right'},t.due_date?el('span',{class:'check-due'},'Due '+fmtDate(t.due_date)):null,
+        el('button',{class:'icon-btn danger',title:'Delete step',onclick:async()=>{await api.deleteTask(t.id);const i=items.indexOf(t);if(i>=0)items.splice(i,1);drawList(items);updateCount(items);}},'🗑')));
+  }
+  const newInput=el('input',{class:'inline-input',placeholder:'Add a step…',type:'text'});
+  const dueInput=el('input',{class:'inline-input date',type:'date',title:'Optional due date'});
+  async function addTask(){const label=newInput.value.trim();if(!label)return;
+    const created=await api.createTask(state.offering.id,{label,due_date:dueInput.value||null});tasks.push(created);
+    newInput.value='';dueInput.value='';drawList(tasks);updateCount(tasks);newInput.focus();}
+  newInput.addEventListener('keydown',e=>{if(e.key==='Enter')addTask();});
+  drawList(tasks);
+  return el('section',{class:'panel'},el('div',{class:'section-head'},el('h2',{},'Process checklist'),countLabel),list,
+    el('div',{class:'add-task-row'},newInput,dueInput,el('button',{class:'btn btn-primary btn-sm',onclick:addTask},'Add step')));
+}
+async function reconciliationTab(state){
+  const{reconciliations,summary}=await api.listReconciliations(state.offering.id);
+  const dateInput=el('input',{type:'date',class:'inline-input date'});
+  const balInput=el('input',{type:'text',class:'inline-input money-input',placeholder:'0.00',inputmode:'decimal'});
+  const notesInput=el('input',{type:'text',class:'inline-input grow',placeholder:'Notes (optional)'});
+  async function addRecon(){if(!balInput.value.trim()){toast('Enter the statement balance.','error');return;}
+    await api.createReconciliation(state.offering.id,{statement_date:dateInput.value||null,statement_balance:balInput.value,notes:notesInput.value||null});
+    toast('Reconciliation saved.','success');refresh();}
+  return el('div',{},
+    el('section',{class:'panel'},el('h2',{class:'panel-title'},'Reconcile to bank statement'),
+      el('p',{class:'muted-text'},'The app tracks a cleared book balance of ',el('strong',{},money(summary.clearedBalance)),'. Enter your escrow bank statement balance to check they agree.'),
+      el('div',{class:'recon-form'},
+        el('div',{class:'recon-field'},el('label',{},'Statement date'),dateInput),
+        el('div',{class:'recon-field'},el('label',{},'Statement balance'),el('div',{class:'money-wrap'},el('span',{class:'money-prefix'},'$'),balInput)),
+        el('div',{class:'recon-field grow'},el('label',{},'Notes'),notesInput),
+        el('button',{class:'btn btn-primary',onclick:addRecon},'Check'))),
+    el('section',{class:'panel'},el('h2',{class:'panel-title'},'Reconciliation history'),
+      !reconciliations.length?emptyState('No reconciliations recorded yet.'):
+      el('table',{class:'data-table'},
+        el('thead',{},el('tr',{},el('th',{},'Statement date'),el('th',{class:'num'},'Statement balance'),el('th',{class:'num'},'App cleared balance'),el('th',{class:'num'},'Difference'),el('th',{},'Notes'),el('th',{},''))),
+        el('tbody',{},...reconciliations.map(r=>{const appBal=r.statement_balance_cents-r.difference_cents;const matched=r.difference_cents===0;
+          return el('tr',{},el('td',{},fmtDate(r.statement_date)),el('td',{class:'num'},money(r.statement_balance_cents)),el('td',{class:'num'},money(appBal)),
+            el('td',{class:'num'},matched?pill('✓ Matches','success'):pill((r.difference_cents>0?'+':'−')+money(Math.abs(r.difference_cents)),'danger')),
+            el('td',{},r.notes||'—'),el('td',{class:'row-actions'},el('button',{class:'icon-btn danger',title:'Delete',onclick:async()=>{await api.deleteReconciliation(r.id);toast('Deleted.','success');refresh();}},'🗑')));})))));
+}
+
+async function renderInvestors(){
+  const investors=await api.listInvestors();
+  const addBtn=el('button',{class:'btn btn-primary',onclick:()=>openInvestorForm(null,i=>navigate(`/investors/${i.id}`))},'+ New investor');
+  const tbody=el('tbody',{},...investors.map(investorRow));
+  const search=el('input',{class:'search-input',type:'search',placeholder:'Search investors…',oninput:e=>{const q=e.target.value.toLowerCase();
+    tbody.querySelectorAll('tr').forEach(tr=>{tr.style.display=tr.dataset.search.includes(q)?'':'none';});}});
+  return el('div',{},pageHeader('Investors',{subtitle:`${investors.length} contact${investors.length===1?'':'s'}`,actions:[addBtn]}),
+    !investors.length?emptyState('No investors yet.',el('button',{class:'btn btn-primary',onclick:()=>openInvestorForm(null,i=>navigate(`/investors/${i.id}`))},'Add your first investor')):
+    el('div',{},el('div',{class:'toolbar'},search),
+      el('table',{class:'data-table hover'},
+        el('thead',{},el('tr',{},el('th',{},'Name'),el('th',{},'Type'),el('th',{},'Email'),el('th',{},'Phone'),el('th',{},'Accredited'),el('th',{class:'num'},'Offerings'))),tbody)));
+}
+function investorRow(i){
+  return el('tr',{dataset:{search:`${i.name} ${i.email||''} ${i.phone||''}`.toLowerCase()},onclick:()=>navigate(`/investors/${i.id}`)},
+    el('td',{},el('span',{class:'link'},i.name)),el('td',{},i.entity_type),el('td',{},i.email||'—'),el('td',{},i.phone||'—'),
+    el('td',{},pill(i.accredited_status,ACCREDITED_KIND[i.accredited_status]||'muted')),el('td',{class:'num'},String(i.offering_count)));
+}
+async function renderInvestor(id){
+  const inv=await api.getInvestor(id);
+  const totalCommitted=inv.subscriptions.reduce((a,s)=>a+(s.amount_committed_cents||0),0);
+  async function del(){const ok=await confirmDialog(`Delete investor “${inv.name}”?`,{danger:true,confirmLabel:'Delete'});if(!ok)return;
+    try{await api.deleteInvestor(inv.id);toast('Investor deleted.','success');navigate('/investors');}catch(e){toast(e.message,'error');}}
+  return el('div',{class:'view-investor'},
+    pageHeader(inv.name,{back:{href:'#/investors',label:'All investors'},subtitle:inv.entity_type+(inv.contact_name?` · ${inv.contact_name}`:''),
+      actions:[el('button',{class:'btn btn-ghost',onclick:()=>openInvestorForm(inv,()=>refresh())},'Edit'),el('button',{class:'btn btn-danger-ghost',onclick:del},'Delete')]}),
+    el('div',{class:'grid-2'},
+      el('section',{class:'panel'},el('h2',{class:'panel-title'},'Contact & accreditation'),
+        detailGrid([['Email',inv.email?el('a',{class:'link',href:`mailto:${inv.email}`},inv.email):'—'],['Phone',inv.phone],['Address',inv.address],
+          ['Accredited status',pill(inv.accredited_status,ACCREDITED_KIND[inv.accredited_status]||'muted')],['Verified on',fmtDate(inv.accredited_verified_date)]]),
+        inv.notes?el('div',{class:'notes-block'},el('h3',{},'Notes'),el('p',{},inv.notes)):null),
+      el('section',{class:'panel'},el('h2',{class:'panel-title'},`Offerings — ${money(totalCommitted)} committed`),
+        !inv.subscriptions.length?emptyState('Not on any offering yet.'):
+        el('table',{class:'data-table'},el('thead',{},el('tr',{},el('th',{},'Offering'),el('th',{},'Status'),el('th',{class:'num'},'Committed'))),
+          el('tbody',{},...inv.subscriptions.map(s=>el('tr',{onclick:()=>navigate(`/offerings/${s.offering_id}?tab=Investors`)},
+            el('td',{},el('span',{class:'link'},s.offering_name)),el('td',{},pill(s.status,SUBSCRIPTION_KIND[s.status]||'muted')),el('td',{class:'num'},money(s.amount_committed_cents)))))))));
+}
+
+/* ============================================================================
+   ROUTER
+   ========================================================================== */
+const viewEl=document.getElementById('view');
+const routes=[
+  [/^\/?(?:\?.*)?$/,()=>renderDashboard(),'dashboard'],
+  [/^\/offerings\/(\d+)(?:\?.*)?$/,m=>renderOffering(m[1]),'offerings'],
+  [/^\/offerings(?:\?.*)?$/,()=>renderOfferings(),'offerings'],
+  [/^\/investors\/(\d+)(?:\?.*)?$/,m=>renderInvestor(m[1]),'investors'],
+  [/^\/investors(?:\?.*)?$/,()=>renderInvestors(),'investors'],
+];
+async function router(){
+  const hash=location.hash.replace(/^#/,'')||'/';
+  const match=routes.find(([re])=>re.test(hash));
+  const navKey=match?match[2]:'dashboard';
+  document.querySelectorAll('.nav a').forEach(a=>a.classList.toggle('active',a.dataset.nav===navKey));
+  clear(viewEl);viewEl.appendChild(el('div',{class:'loading'},'Loading…'));
+  try{
+    // match[0] is the regex, match[1] the handler, match[2] the nav key.
+    const node=match?await match[1](hash.match(match[0])):notFound();
+    clear(viewEl);viewEl.appendChild(node);viewEl.scrollTop=0;
+  }catch(err){clear(viewEl);viewEl.appendChild(el('div',{class:'error-state'},el('h2',{},'Something went wrong'),el('p',{},err.message)));}
+}
+function notFound(){return el('div',{class:'error-state'},el('h2',{},'Page not found'),el('a',{class:'btn btn-primary',onclick:()=>location.hash='#/'},'Back to dashboard'));}
+function navigate(path){if(location.hash==='#'+path)router();else location.hash=path;}
+function refresh(){router();}
+window.addEventListener('hashchange',router);
+
+/* ============================================================================
+   BOOT
+   ========================================================================== */
+async function boot(){
+  const raw=localStorage.getItem(LS_KEY);
+  if(raw){try{db=parseDB(raw);}catch{db=EMPTY();}}
+  // Try to remember a previously connected file (needs a click to re-grant).
+  if(FSA){try{const h=await idbGet('fileHandle');if(h)pendingHandle=h;}catch{}}
+  renderFileStatus();
+  router();
+}
+boot();
+</script>
+</body>
+</html>
