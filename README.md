@@ -1,4 +1,4 @@
-# OfferingBook
+# CapitalVault
 
 A private, single-user tool for a law firm to run **Regulation D / private
 placement (PPM) offerings** — track each offering's process, the investors and
@@ -9,9 +9,9 @@ data ever leaves your machine.
 
 ---
 
-## The app: `OfferingBook.html` — no installation
+## The app: `CapitalVault.html` — no installation
 
-**To use it, just double-click `OfferingBook.html`** and it opens in your web
+**To use it, just double-click `CapitalVault.html`** and it opens in your web
 browser. There is nothing to install — no Node.js, no server, no setup.
 
 > **Use Google Chrome or Microsoft Edge.** These browsers let the app save your
@@ -25,7 +25,7 @@ computer (so nothing is lost if you close and reopen it). To store it in a real
 **file on your computer** — recommended, so you can back it up and move it
 between machines — use the buttons at the bottom-left of the app:
 
-- **New file…** — create a data file (e.g. `offeringbook-data.json`). Put it in a
+- **New file…** — create a data file (e.g. `capitalvault-data.json`). Put it in a
   synced or encrypted folder (OneDrive, Dropbox, an encrypted drive) and your
   normal backups take care of it. From then on, every change **autosaves** to
   that file.
@@ -96,7 +96,7 @@ to your last file with one click.
 The repository also contains an alternative implementation that runs as a small
 local server backed by a **SQLite database** file, for anyone who prefers that
 (for example, to later self-host it). **You do not need this** to use
-OfferingBook — the single `OfferingBook.html` file above is the recommended way.
+CapitalVault — the single `CapitalVault.html` file above is the recommended way.
 
 The server version requires [Node.js](https://nodejs.org) 20+. To run it:
 
@@ -106,6 +106,6 @@ npm install
 npm start          # then open http://localhost:4000
 ```
 
-Its data lives in `node-server/data/offeringbook.db`. Note that the two versions
+Its data lives in `node-server/data/capitalvault.db`. Note that the two versions
 store data separately and do not share it — pick one and stick with it. See the
 code under `node-server/` for details.

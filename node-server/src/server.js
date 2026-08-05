@@ -43,7 +43,7 @@ app.use((err, req, res, next) => {
 });
 
 app.listen(PORT, HOST, () => {
-  console.log('\n  OfferingBook is running.');
+  console.log('\n  CapitalVault is running.');
   console.log(`  Open your browser to:  http://${HOST}:${PORT}`);
   console.log(`  Database file:         ${DB_PATH}`);
   console.log('\n  Press Ctrl+C to stop.\n');

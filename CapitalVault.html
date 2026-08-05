@@ -3,8 +3,8 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>OfferingBook</title>
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📘</text></svg>" />
+<title>CapitalVault</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔐</text></svg>" />
 <style>
 :root{
   --bg:#f4f5f7;--surface:#fff;--surface-2:#f8f9fb;--border:#e3e6ec;--border-strong:#d2d7e0;
@@ -222,7 +222,7 @@ a{color:inherit;text-decoration:none}
 <body>
 <div id="app">
   <aside class="sidebar">
-    <div class="brand"><span class="brand-mark">📘</span><span class="brand-name">OfferingBook</span></div>
+    <div class="brand"><span class="brand-mark">🔐</span><span class="brand-name">CapitalVault</span></div>
     <nav class="nav">
       <a data-nav="dashboard" onclick="location.hash='#/'">Dashboard</a>
       <a data-nav="offerings" onclick="location.hash='#/offerings'">Offerings</a>
@@ -240,7 +240,7 @@ a{color:inherit;text-decoration:none}
 
 <script type="module">
 /* ============================================================================
-   OfferingBook — single-file, no-install web app.
+   CapitalVault — single-file, no-install web app.
    Data is held in memory, mirrored to localStorage (crash safety), and
    autosaved to a real file you choose via the File System Access API.
    ========================================================================== */
@@ -402,9 +402,10 @@ function formModal({title,fields,values={},submitLabel='Save',onSubmit,wide=fals
 /* ============================================================================
    STORE — in-memory data + persistence to file/localStorage
    ========================================================================== */
-const LS_KEY='offeringbook:data';
+const LS_KEY='capitalvault:data';
+const LS_KEY_OLD='offeringbook:data'; // data saved under the previous app name — migrated on load
 const COLLECTIONS=['offerings','investors','subscriptions','escrow','tasks','reconciliations','closings','certificates'];
-const EMPTY=()=>({meta:{version:1,app:'OfferingBook'},
+const EMPTY=()=>({meta:{version:1,app:'CapitalVault'},
   seq:{offerings:0,investors:0,subscriptions:0,escrow:0,tasks:0,reconciliations:0,closings:0,certificates:0},
   offerings:[],investors:[],subscriptions:[],escrow:[],tasks:[],reconciliations:[],closings:[],certificates:[]});
 let db=EMPTY();
@@ -425,7 +426,7 @@ function normalize(obj){
 }
 function parseDB(text){
   const obj=JSON.parse(text);
-  if(typeof obj!=='object'||obj===null)throw new Error('Not a valid OfferingBook file');
+  if(typeof obj!=='object'||obj===null)throw new Error('Not a valid CapitalVault file');
   return normalize(obj);
 }
 function nextId(kind){db.seq[kind]=(db.seq[kind]||0)+1;return db.seq[kind];}
@@ -452,6 +453,8 @@ async function persist(){
 }
 
 /* IndexedDB (just to remember the chosen file between sessions) */
+// Internal IndexedDB name kept unchanged across the rename so a previously
+// connected data file still reconnects with one click after the rebrand.
 function idbOpen(){return new Promise((res,rej)=>{const r=indexedDB.open('offeringbook',1);
   r.onupgradeneeded=()=>r.result.createObjectStore('kv');r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error);});}
 async function idbSet(k,v){try{const d=await idbOpen();return await new Promise((res,rej)=>{const t=d.transaction('kv','readwrite');t.objectStore('kv').put(v,k);t.oncomplete=()=>res();t.onerror=()=>rej(t.error);});}catch{}}
@@ -466,15 +469,15 @@ async function verifyPermission(handle,rw){
 }
 async function newDataFile(){
   try{
-    const h=await window.showSaveFilePicker({suggestedName:'offeringbook-data.json',
-      types:[{description:'OfferingBook data',accept:{'application/json':['.json']}}]});
+    const h=await window.showSaveFilePicker({suggestedName:'capitalvault-data.json',
+      types:[{description:'CapitalVault data',accept:{'application/json':['.json']}}]});
     fileHandle=h;fileName=h.name;await persist();await idbSet('fileHandle',h);renderFileStatus();
     toast('Data file created — your changes now save here.','success');
   }catch(e){if(e.name!=='AbortError')toast('Could not create file: '+e.message,'error');}
 }
 async function openDataFile(){
   try{
-    const[h]=await window.showOpenFilePicker({types:[{description:'OfferingBook data',accept:{'application/json':['.json']}}]});
+    const[h]=await window.showOpenFilePicker({types:[{description:'CapitalVault data',accept:{'application/json':['.json']}}]});
     if(!(await verifyPermission(h,true)))throw new Error('Permission to the file was denied.');
     const text=await(await h.getFile()).text();
     const parsed=parseDB(text);
@@ -498,7 +501,7 @@ function disconnectFile(){fileHandle=null;fileName=null;idbSet('fileHandle',null
 function stamp(){return new Date().toISOString().replace(/[:.]/g,'-').slice(0,19);}
 function downloadCopy(){
   const blob=new Blob([serialize()],{type:'application/json'});const url=URL.createObjectURL(blob);
-  const a=el('a',{href:url,download:`offeringbook-backup-${stamp()}.json`});document.body.appendChild(a);a.click();a.remove();
+  const a=el('a',{href:url,download:`capitalvault-backup-${stamp()}.json`});document.body.appendChild(a);a.click();a.remove();
   URL.revokeObjectURL(url);toast('Backup copy downloaded.','success');
 }
 function importFile(){
@@ -891,7 +894,7 @@ async function renderDashboard(){
 }
 function welcomePanel(){
   return el('div',{class:'welcome'},el('section',{class:'panel'},
-    el('h2',{},'Welcome to OfferingBook'),
+    el('h2',{},'Welcome to CapitalVault'),
     el('p',{class:'muted-text'},'Track your private placement offerings, investors, and escrow funds — all on your own computer. Nothing is sent anywhere.'),
     FSA?el('div',{},
       el('p',{},'Your data is currently kept in this browser. To store it in a file on your computer (recommended, so you can back it up and move it between machines), connect a data file:'),
@@ -1352,7 +1355,7 @@ function buildSummaryReport(o,subs,escrowData,reconData,closingsData,certsData){
       ['Difference',latestRecon.difference_cents===0?'Matches':money(latestRecon.difference_cents)],
     ])):null,
     el('div',{class:'report-foot'},
-      'This summary is generated by OfferingBook for internal practice-management purposes only. ',
+      'This summary is generated by CapitalVault for internal practice-management purposes only. ',
       'It is not a legal, accounting, or compliance record and does not constitute a filing. Verify all figures against source documents and the escrow bank statement before any closing.'),
   );
 }
@@ -1402,7 +1405,9 @@ window.addEventListener('hashchange',router);
    BOOT
    ========================================================================== */
 async function boot(){
-  const raw=localStorage.getItem(LS_KEY);
+  // Load the browser mirror, falling back to data saved under the previous app name.
+  let raw=localStorage.getItem(LS_KEY);
+  if(!raw){const old=localStorage.getItem(LS_KEY_OLD);if(old)raw=old;}
   if(raw){try{db=parseDB(raw);}catch{db=EMPTY();}}
   // Try to remember a previously connected file (needs a click to re-grant).
   if(FSA){try{const h=await idbGet('fileHandle');if(h)pendingHandle=h;}catch{}}

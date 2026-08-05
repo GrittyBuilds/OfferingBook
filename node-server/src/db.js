@@ -5,12 +5,12 @@ import { mkdirSync } from 'node:fs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-// The database lives in ./data/offeringbook.db at the project root.
+// The database lives in ./data/capitalvault.db at the project root.
 // Backing up the whole app is as simple as copying that one file.
 const dataDir = join(__dirname, '..', 'data');
 mkdirSync(dataDir, { recursive: true });
 
-export const DB_PATH = process.env.OFFERINGBOOK_DB || join(dataDir, 'offeringbook.db');
+export const DB_PATH = process.env.CAPITALVAULT_DB || join(dataDir, 'capitalvault.db');
 
 const db = new Database(DB_PATH);
 db.pragma('journal_mode = WAL');
