@@ -187,6 +187,31 @@ a{color:inherit;text-decoration:none}
   .content{padding:22px 20px 50px}.sidebar{width:200px}
   .form-grid{grid-template-columns:1fr}.form-row.half{grid-column:1/-1}
 }
+/* ---- Global Add button -------------------------------------------------- */
+.global-add-wrap{padding:4px 12px 6px}
+.global-add{width:100%;background:var(--accent);color:#1b1205;border:none;border-radius:var(--radius-sm);padding:11px 14px;font-size:14.5px;font-weight:700;cursor:pointer;font-family:inherit;letter-spacing:.2px;transition:background .12s}
+.global-add:hover{background:#c39a5f}
+/* ---- Quick-add / offering picker list ----------------------------------- */
+.qa-list{display:flex;flex-direction:column;gap:8px}
+.qa-item{display:flex;flex-direction:column;gap:2px;text-align:left;background:var(--surface);border:1px solid var(--border-strong);border-radius:var(--radius-sm);padding:12px 14px;cursor:pointer;font-family:inherit;transition:border-color .12s,background .12s}
+.qa-item:hover{border-color:var(--navy);background:var(--surface-2)}
+.qa-item-title{font-weight:600;font-size:14.5px;color:var(--text)}
+.qa-item-desc{font-size:12.5px;color:var(--muted)}
+/* ---- Investor typeahead ------------------------------------------------- */
+.ac-wrap{position:relative}
+.ac-input{width:100%;padding:9px 11px;border:1px solid var(--border-strong);border-radius:var(--radius-sm);font-size:14px;font-family:inherit;background:var(--surface);color:var(--text)}
+.ac-input:focus{outline:none;border-color:var(--navy);box-shadow:0 0 0 3px rgba(31,58,95,.1)}
+.ac-menu{position:absolute;top:calc(100% + 4px);left:0;right:0;background:var(--surface);border:1px solid var(--border-strong);border-radius:var(--radius-sm);box-shadow:var(--shadow-lg);z-index:20;max-height:240px;overflow:auto}
+.ac-item{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:8px 11px;cursor:pointer;font-size:14px}
+.ac-item:hover,.ac-item.active{background:var(--surface-2)}
+.ac-item .ac-name{font-weight:500}.ac-item .ac-meta{font-size:11.5px;color:var(--muted)}
+.ac-empty{padding:10px 11px;font-size:12.5px;color:var(--muted)}
+/* ---- Form sections & class-structure editor ----------------------------- */
+.form-section-head{grid-column:1/-1;font-size:12px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);font-weight:700;border-bottom:1px solid var(--border);padding-bottom:5px;margin-top:4px}
+.class-rows{display:flex;flex-direction:column;gap:8px}
+.class-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.class-row .inline-input:first-child{flex:1;min-width:150px}
+.investor-group{margin-bottom:16px}
 /* ---- Printable summary -------------------------------------------------- */
 @media screen{#print-root{display:none}}
 @media print{
@@ -223,6 +248,7 @@ a{color:inherit;text-decoration:none}
 <div id="app">
   <aside class="sidebar">
     <div class="brand"><span class="brand-mark">🔐</span><span class="brand-name">CapitalVault</span></div>
+    <div class="global-add-wrap"><button id="global-add" class="global-add" type="button">＋ Add</button></div>
     <nav class="nav">
       <a data-nav="dashboard" onclick="location.hash='#/'">Dashboard</a>
       <a data-nav="offerings" onclick="location.hash='#/offerings'">Offerings</a>
@@ -251,6 +277,11 @@ const OFFERING_STATUS_KIND={Drafting:'default',Filed:'info',Open:'success',Closi
 const EXEMPTIONS=['Reg D 506(b)','Reg D 506(c)','Reg D 504','Reg A+ Tier 1','Reg A+ Tier 2','Reg CF','Reg S','Section 4(a)(2)','Intrastate','Other'];
 const SECURITY_TYPES=['Common Equity','Preferred Equity','LLC Units','LP Interests','Promissory Note','Convertible Note','SAFE','Revenue Share','Other'];
 const ENTITY_TYPES=['Individual','Entity','Trust','Joint','IRA / Retirement'];
+// Types whose name is entered as first / middle / last (a natural person).
+const PERSON_TYPES=['Individual','Joint','IRA / Retirement'];
+// Order the Investors contact book groups appear in.
+const ENTITY_TYPE_ORDER=['Individual','Joint','IRA / Retirement','Trust','Entity'];
+function isPersonType(t){return PERSON_TYPES.includes(t);}
 const ACCREDITED_STATUSES=['Unknown','Self-certified','Verified','Not accredited'];
 const ACCREDITED_KIND={Unknown:'muted','Self-certified':'info',Verified:'success','Not accredited':'danger'};
 const SUBSCRIPTION_STATUSES=['Prospect','Sub sent','Sub signed','Funded','Closed','Withdrawn'];
@@ -298,6 +329,33 @@ function dollarsToCents(v){if(v===null||v===undefined||v==='')return null;const 
 function str(v){if(v===null||v===undefined)return null;const s=String(v).trim();return s===''?null:s;}
 function numOr(v,d=null){if(v===null||v===undefined||v==='')return d;const n=Number(v);return isFinite(n)?n:d;}
 function nowISO(){return new Date().toISOString();}
+/* ---- Investor name helpers ---------------------------------------------- */
+// Full display name, e.g. "Jane Q. Public" or the entity name.
+function investorDisplayName(i){
+  if(!i)return '—';
+  if(isPersonType(i.entity_type)){
+    const parts=[i.first_name,i.middle_name,i.last_name].filter(Boolean);
+    if(parts.length)return parts.join(' ');
+  }
+  return i.name||[i.first_name,i.last_name].filter(Boolean).join(' ')||'(unnamed)';
+}
+// Listing name for individuals: "Last, First M." (sorts naturally by last name).
+function investorListName(i){
+  if(isPersonType(i.entity_type)&&(i.last_name||i.first_name)){
+    const mi=i.middle_name?` ${String(i.middle_name).trim()[0]}.`:'';
+    const head=i.last_name||'';const tail=[i.first_name,mi].filter(Boolean).join('').trim();
+    return head&&tail?`${head}, ${tail}`:(head||investorDisplayName(i));
+  }
+  return investorDisplayName(i);
+}
+// Sort key: individuals by last, first, middle; others by name.
+function investorSortKey(i){
+  if(isPersonType(i.entity_type))
+    return [i.last_name||i.name||'',i.first_name||'',i.middle_name||''].map(s=>String(s).toLowerCase()).join(' ');
+  return String(i.name||'').toLowerCase();
+}
+// Mask a stored SSN/EIN for display (show last 4 only).
+function fmtTaxId(v){if(!v)return'—';const s=String(v).trim();if(s.length<=4)return s;return '•••'+s.slice(-4);}
 
 /* ---- Components ---------------------------------------------------------- */
 function pageHeader(title,{subtitle,actions,back}={}){
@@ -348,47 +406,75 @@ function confirmDialog(message,{danger=false,confirmLabel='Confirm'}={}){
     openShell(danger?'Please confirm':'Confirm',body);
   });
 }
+// Fields support: type text/textarea/select/checkbox/money/number/date/email/tel,
+// plus type:'custom' (f.build(value) → {node, get value}) for widgets like the
+// investor typeahead, an optional f.showIf(values)→bool to hide fields, an
+// f.onChange(values,api) hook, and f.section headers to group fields.
 function formModal({title,fields,values={},submitLabel='Save',onSubmit,wide=false}){
-  const inputs={};
+  const inputs={};   // name → element or custom controller ({node, value})
+  const rowEls={};   // name → the .form-row wrapper (for showIf)
   const errorBox=el('div',{class:'form-error',style:'display:none'});
-  const rows=fields.map(f=>{
-    let input;const common={id:`f_${f.name}`,name:f.name,placeholder:f.placeholder||''};
-    if(f.type==='checkbox'){
+  const rows=[];
+  for(const f of fields){
+    if(f.type==='section'){rows.push(el('div',{class:'form-section-head'},f.label));continue;}
+    let input,rowEl;const common={id:`f_${f.name}`,name:f.name,placeholder:f.placeholder||''};
+    if(f.type==='custom'){
+      const ctrl=f.build(values[f.name]);inputs[f.name]=ctrl;
+      rowEl=el('div',{class:`form-row ${f.half?'half':''}`},
+        el('label',{},f.label,f.required?el('span',{class:'req'},' *'):null),
+        ctrl.node,f.help?el('div',{class:'field-help'},f.help):null);
+    }else if(f.type==='checkbox'){
       input=el('input',{id:`f_${f.name}`,name:f.name,type:'checkbox',checked:!!values[f.name]});
       inputs[f.name]=input;
-      return el('div',{class:`form-row ${f.half?'half':''}`},
+      rowEl=el('div',{class:`form-row ${f.half?'half':''}`},
         el('label',{class:'form-check'},input,el('span',{},f.label),
           f.help?el('span',{class:'field-help',style:'margin-left:6px'},f.help):null));
+    }else{
+      if(f.type==='textarea')input=el('textarea',{...common,rows:f.rows||3},values[f.name]??'');
+      else if(f.type==='select')input=el('select',common,...(f.options||[]).map(o=>{
+        const val=typeof o==='object'?o.value:o,label=typeof o==='object'?o.label:o;
+        return el('option',{value:val,selected:String(values[f.name]??'')===String(val)},label);
+      }));
+      else{
+        const type=f.type==='money'?'text':(f.type||'text');
+        input=el('input',{...common,type,value:values[f.name]??'',min:f.min,step:f.step,
+          inputmode:f.type==='money'||f.type==='number'?'decimal':undefined});
+        if(f.type==='money')input.classList.add('money-input');
+        if(f.datalist){const dlid=`dl_${f.name}`;input.setAttribute('list',dlid);
+          input.__dl=el('datalist',{id:dlid},...f.datalist.map(v=>el('option',{value:v})));}
+      }
+      inputs[f.name]=input;
+      rowEl=el('div',{class:`form-row ${f.half?'half':''}`},
+        el('label',{for:`f_${f.name}`},f.label,f.required?el('span',{class:'req'},' *'):null),
+        f.type==='money'?el('div',{class:'money-wrap'},el('span',{class:'money-prefix'},'$'),input):input,
+        input.__dl||null,
+        f.help?el('div',{class:'field-help'},f.help):null);
     }
-    if(f.type==='textarea')input=el('textarea',{...common,rows:f.rows||3},values[f.name]??'');
-    else if(f.type==='select')input=el('select',common,...(f.options||[]).map(o=>{
-      const val=typeof o==='object'?o.value:o,label=typeof o==='object'?o.label:o;
-      return el('option',{value:val,selected:String(values[f.name]??'')===String(val)},label);
-    }));
-    else{
-      const type=f.type==='money'?'text':(f.type||'text');
-      input=el('input',{...common,type,value:values[f.name]??'',min:f.min,step:f.step,
-        inputmode:f.type==='money'||f.type==='number'?'decimal':undefined});
-      if(f.type==='money')input.classList.add('money-input');
-      if(f.datalist){const dlid=`dl_${f.name}`;input.setAttribute('list',dlid);
-        input.__dl=el('datalist',{id:dlid},...f.datalist.map(v=>el('option',{value:v})));}
-    }
-    inputs[f.name]=input;
-    return el('div',{class:`form-row ${f.half?'half':''}`},
-      el('label',{for:`f_${f.name}`},f.label,f.required?el('span',{class:'req'},' *'):null),
-      f.type==='money'?el('div',{class:'money-wrap'},el('span',{class:'money-prefix'},'$'),input):input,
-      input.__dl||null,
-      f.help?el('div',{class:'field-help'},f.help):null);
-  });
+    rowEls[f.name]=rowEl;rows.push(rowEl);
+  }
+  function readVal(f){const inp=inputs[f.name];if(!inp)return null;
+    if(f.type==='checkbox')return inp.checked;
+    let v=inp.value;if(typeof v==='string')v=v.trim();return v===''?null:v;}
+  function currentValues(){const v={};for(const f of fields){if(f.type==='section')continue;v[f.name]=readVal(f);}return v;}
+  function visible(f){return !f.showIf||f.showIf(currentValues());}
+  function reflow(){for(const f of fields){if(f.type==='section'||!rowEls[f.name])continue;
+    if(f.showIf)rowEls[f.name].style.display=f.showIf(currentValues())?'':'none';}
+    for(const f of fields){if(f.onChange)f.onChange(currentValues(),{setValue,getValue});}}
+  function getValue(name){const f=fields.find(x=>x.name===name);return f?readVal(f):null;}
+  function setValue(name,val){const inp=inputs[name];if(!inp)return;
+    const f=fields.find(x=>x.name===name);
+    if(f&&f.type==='checkbox')inp.checked=!!val;else if('value'in inp)try{inp.value=val==null?'':val;}catch{}}
+  for(const f of fields){const inp=inputs[f.name];if(!inp||f.type==='custom')continue;
+    const node=inp;node.addEventListener('change',reflow);
+    if(node.tagName==='INPUT'||node.tagName==='TEXTAREA')node.addEventListener('input',reflow);}
   const submitBtn=el('button',{class:'btn btn-primary',type:'submit'},submitLabel);
   const form=el('form',{class:'modal-body form-grid',onsubmit:async e=>{
     e.preventDefault();errorBox.style.display='none';
     const collected={};
-    for(const f of fields){const inp=inputs[f.name];
-      if(f.type==='checkbox'){collected[f.name]=inp.checked;continue;}
-      let v=inp.value;if(typeof v==='string')v=v.trim();collected[f.name]=v===''?null:v;}
-    const missing=fields.find(f=>f.required&&!collected[f.name]);
-    if(missing){errorBox.textContent=`${missing.label} is required.`;errorBox.style.display='block';inputs[missing.name].focus();return;}
+    for(const f of fields){if(f.type==='section')continue;collected[f.name]=readVal(f);}
+    const missing=fields.find(f=>f.required&&visible(f)&&!collected[f.name]);
+    if(missing){errorBox.textContent=`${missing.label} is required.`;errorBox.style.display='block';
+      const mi=inputs[missing.name];if(mi&&mi.focus)mi.focus();else if(mi&&mi.node)(mi.node.querySelector('input,select,textarea')||{focus(){}}).focus();return;}
     submitBtn.disabled=true;submitBtn.textContent='Saving…';
     try{await onSubmit(collected);closeModal();}
     catch(err){errorBox.textContent=err.message||'Something went wrong.';errorBox.style.display='block';submitBtn.disabled=false;submitBtn.textContent=submitLabel;}
@@ -396,7 +482,44 @@ function formModal({title,fields,values={},submitLabel='Save',onSubmit,wide=fals
     el('div',{class:'modal-actions'},
       el('button',{class:'btn btn-ghost',type:'button',onclick:closeModal},'Cancel'),submitBtn));
   openShell(title,form,{wide});
-  const first=fields[0]&&inputs[fields[0].name];if(first)setTimeout(()=>first.focus(),50);
+  reflow();
+  const firstField=fields.find(f=>f.type!=='section');
+  const first=firstField&&inputs[firstField.name];
+  if(first)setTimeout(()=>{if(first.focus)first.focus();else if(first.node){const inp=first.node.querySelector('input,select,textarea');if(inp)inp.focus();}},50);
+}
+
+/* ---- Investor typeahead (search-as-you-type) ---------------------------- */
+// Returns a controller with .node (to place in a form) and .value (investor id
+// as a string, or '' if nothing chosen). Used wherever you pick an investor.
+function investorPicker(investors,selectedId){
+  const byId=new Map(investors.map(i=>[i.id,i]));
+  let chosen=selectedId!=null&&byId.has(Number(selectedId))?Number(selectedId):'';
+  const input=el('input',{type:'text',class:'ac-input',placeholder:'Type a name to search…',autocomplete:'off'});
+  const menu=el('div',{class:'ac-menu',style:'display:none'});
+  const node=el('div',{class:'ac-wrap'},input,menu);
+  if(chosen!=='')input.value=investorDisplayName(byId.get(chosen));
+  function hide(){menu.style.display='none';active=-1;}
+  let active=-1,shown=[];
+  function render(items){shown=items.slice(0,12);clear(menu);
+    if(!shown.length){menu.appendChild(el('div',{class:'ac-empty'},'No match — add them from the Investors tab.'));menu.style.display='block';return;}
+    shown.forEach((i,idx)=>menu.appendChild(el('div',{class:'ac-item'+(idx===active?' active':''),
+      onmousedown:e=>{e.preventDefault();pick(i);}},
+      el('span',{class:'ac-name'},investorListName(i)),el('span',{class:'ac-meta'},i.entity_type||''))));
+    menu.style.display='block';}
+  function pick(i){chosen=i.id;input.value=investorDisplayName(i);hide();}
+  function filter(){const q=input.value.trim().toLowerCase();
+    if(!q)return investors.slice().sort((a,b)=>investorSortKey(a).localeCompare(investorSortKey(b)));
+    return investors.filter(i=>investorDisplayName(i).toLowerCase().includes(q)||investorListName(i).toLowerCase().includes(q)||String(i.tax_id||'').includes(q))
+      .sort((a,b)=>investorSortKey(a).localeCompare(investorSortKey(b)));}
+  input.addEventListener('input',()=>{chosen='';active=-1;render(filter());});
+  input.addEventListener('focus',()=>render(filter()));
+  input.addEventListener('blur',()=>setTimeout(hide,160));
+  input.addEventListener('keydown',e=>{
+    if(e.key==='ArrowDown'){e.preventDefault();if(menu.style.display==='none')render(filter());active=Math.min(active+1,shown.length-1);render(shown);}
+    else if(e.key==='ArrowUp'){e.preventDefault();active=Math.max(active-1,0);render(shown);}
+    else if(e.key==='Enter'){if(menu.style.display!=='none'&&shown[active]){e.preventDefault();pick(shown[active]);}}
+    else if(e.key==='Escape'){hide();}});
+  return {node,get value(){return chosen===''?'':String(chosen);}};
 }
 
 /* ============================================================================
@@ -583,9 +706,94 @@ function offeringSummary(o){
   const minRaisePct=targetMin>0?Math.min(100,Math.round((escrow.clearedDeposits/targetMin)*100)):null;
   const tasks=db.tasks.filter(t=>t.offering_id===o.id);
   const closings=db.closings.filter(c=>c.offering_id===o.id);
+  const passCosts=db.subscriptions.filter(s=>s.offering_id===o.id).reduce((a,s)=>a+(s.costs_cents||0),0);
   return{escrow,subscriptions:subs,minRaiseMet,minRaisePct,daysToFinalClose:daysUntil(o.final_close_date),
-    tasksTotal:tasks.length,tasksDone:tasks.filter(t=>t.done).length,
+    tasksTotal:tasks.length,tasksDone:tasks.filter(t=>t.done).length,passThroughCosts:passCosts,
     closingsCount:closings.length,totalReleased:closings.reduce((a,c)=>a+(c.amount_released_cents||0),0)};
+}
+
+/* ---- Certificate computation (% interest, accrued return) --------------- */
+// Whole days from a 'YYYY-MM-DD' date to today (never negative). Used for accrual.
+function daysSince(dateStr){
+  if(!dateStr)return null;const t=new Date(dateStr+'T00:00:00');if(isNaN(t))return null;
+  const now=new Date();const t0=new Date(now.getFullYear(),now.getMonth(),now.getDate());
+  return Math.max(0,Math.round((t0-t)/86400000));
+}
+// The default class that cash investors go into (first non-sponsor class).
+function defaultInvestedClass(o){const cls=(o&&Array.isArray(o.classes)?o.classes:[]).filter(c=>!c.sponsor);return cls.length?cls[0].name:null;}
+// Enrich an offering's certificates with computed % of class, total % ownership
+// and accrued return to date. Manual per-certificate values always override.
+function computeCertificates(offeringId){
+  const o=db.offerings.find(x=>x.id===offeringId);
+  const classes=(o&&Array.isArray(o.classes))?o.classes:[];
+  const classByName=new Map(classes.map(c=>[c.name,c]));
+  const raw=db.certificates.filter(c=>c.offering_id===offeringId).map(c=>{
+    const i=db.investors.find(x=>x.id===c.investor_id);
+    return{...c,holder_name:i?investorDisplayName(i):(c.holder_name||null)};});
+  const classCapital={},classCount={};let totalCapital=0;
+  for(const c of raw){const k=c.class_name||'Unclassified';
+    classCapital[k]=(classCapital[k]||0)+(c.capital_cents||0);classCount[k]=(classCount[k]||0)+1;totalCapital+=(c.capital_cents||0);}
+  const anyClassTotals=classes.some(c=>c.total_percent!=null);
+  const enriched=raw.map(c=>{
+    const k=c.class_name||'Unclassified';const def=classByName.get(c.class_name);
+    const capInClass=classCapital[k]||0;
+    // Investor's % share WITHIN its class: pro-rata by capital, else even split
+    // (sponsor/non-cash class), else a manual override.
+    let pctClass=c.pct_of_class;
+    if(pctClass==null){
+      if(capInClass>0&&c.capital_cents!=null)pctClass=(c.capital_cents/capInClass)*100;
+      else if(classCount[k]>0)pctClass=100/classCount[k];
+      else pctClass=null;}
+    // Total % ownership of the whole company.
+    let totalPct=c.percent_interest; // explicit override wins
+    if(totalPct==null){
+      if(def&&def.total_percent!=null&&pctClass!=null)totalPct=pctClass*def.total_percent/100;
+      else if(anyClassTotals&&pctClass!=null)totalPct=pctClass;
+      else if(totalCapital>0&&c.capital_cents!=null)totalPct=(c.capital_cents/totalCapital)*100;
+      else totalPct=pctClass;}
+    // Accrued return to date: capital × rate × days / 365, from the closing date.
+    let accrued=c.accrued_cents;
+    if(accrued==null){const rate=c.pref_return_rate,start=c.accrual_start||c.issue_date||c.funded_date;
+      if(rate!=null&&c.capital_cents!=null&&start){const days=daysSince(start);
+        if(days!=null)accrued=Math.round(c.capital_cents*(rate/100)*(days/365));}}
+    return{...c,pct_of_class_calc:pctClass,total_pct_calc:totalPct,accrued_calc:accrued,
+      class_total_percent:def?def.total_percent:null,class_sponsor:def?!!def.sponsor:false};});
+  const classOrder=new Map(classes.map((c,idx)=>[c.name,idx]));
+  enriched.sort((a,b)=>{
+    const ao=classOrder.has(a.class_name)?classOrder.get(a.class_name):999;
+    const bo=classOrder.has(b.class_name)?classOrder.get(b.class_name):999;
+    if(ao!==bo)return ao-bo;
+    const ac=a.class_name||'~',bc=b.class_name||'~';if(ac!==bc)return ac.localeCompare(bc);
+    const asi=a.sort_index??1e9,bsi=b.sort_index??1e9;if(asi!==bsi)return asi-bsi;
+    return String(a.cert_number||'').localeCompare(String(b.cert_number||''),undefined,{numeric:true});});
+  return{offering:o,classes,certificates:enriched,classCapital,classCount,totalCapital,
+    hasClassTotals:anyClassTotals,classNames:[...new Set(raw.map(c=>c.class_name).filter(Boolean))]};
+}
+// Create certificates for the subscriptions included in a closing. Numbers are
+// assigned in funding-date order, continuing from the highest existing number.
+function generateCertificatesForClosing(offeringId,closing,subIds){
+  const o=db.offerings.find(x=>x.id===offeringId);if(!o)return 0;
+  const existing=db.certificates.filter(c=>c.offering_id===offeringId);
+  let maxNum=existing.reduce((m,c)=>{const n=parseInt(String(c.cert_number||'').replace(/\D/g,''),10);return isFinite(n)?Math.max(m,n):m;},0);
+  let maxSort=existing.reduce((m,c)=>Math.max(m,c.sort_index||0),0);
+  const subs=subIds.map(id=>db.subscriptions.find(s=>s.id===id&&s.offering_id===offeringId))
+    .filter(Boolean).filter(s=>s.investor_id).filter(s=>!existing.some(c=>c.subscription_id===s.id));
+  subs.sort((a,b)=>{const fa=a.funded_date||closing.closing_date||'',fb=b.funded_date||closing.closing_date||'';
+    if(fa!==fb)return fa.localeCompare(fb);
+    const ia=db.investors.find(x=>x.id===a.investor_id),ib=db.investors.find(x=>x.id===b.investor_id);
+    return investorSortKey(ia||{}).localeCompare(investorSortKey(ib||{}));});
+  let made=0;
+  for(const s of subs){
+    const tr=(o.tranches||[]).find(t=>t.id===s.tranche_id);
+    const className=(tr&&tr.class_name)||defaultInvestedClass(o)||o.security_type||'Units';
+    const rate=(tr&&tr.default_return_rate!=null)?tr.default_return_rate:(o.default_return_rate!=null?o.default_return_rate:null);
+    maxNum++;maxSort++;made++;
+    db.certificates.push({id:nextId('certificates'),offering_id:offeringId,subscription_id:s.id,closing_id:closing.id,
+      investor_id:s.investor_id,holder_name:null,class_name:className,capital_cents:s.amount_committed_cents||0,
+      pct_of_class:null,percent_interest:null,pref_return_rate:rate,accrued_cents:null,
+      funded_date:s.funded_date||closing.closing_date||null,accrual_start:closing.closing_date||null,
+      issue_date:closing.closing_date||null,cert_number:String(maxNum),sort_index:maxSort,no_capital:0,created_at:nowISO()});}
+  return made;
 }
 
 /* ---- Local API (mirrors the old server shapes) -------------------------- */
@@ -597,7 +805,9 @@ function offeringFromBody(b){
     launch_date:str(b.launch_date),first_close_date:str(b.first_close_date),final_close_date:str(b.final_close_date),
     form_d_filed_date:str(b.form_d_filed_date),escrow_agent:str(b.escrow_agent),escrow_bank:str(b.escrow_bank),
     escrow_account_number:str(b.escrow_account_number),notes:str(b.notes),
-    no_max:b.no_max?1:0,fractional_allowed:b.fractional_allowed?1:0,no_deadline:b.no_deadline?1:0};
+    default_return_rate:numOr(b.default_return_rate),
+    no_max:b.no_max?1:0,fractional_allowed:b.fractional_allowed?1:0,no_deadline:b.no_deadline?1:0,
+    pass_through_costs:b.pass_through_costs?1:0,costs_label:str(b.costs_label)};
   if(row.no_max)row.target_max_cents=null;        // uncapped raise — ignore any amount
   if(row.no_deadline)row.final_close_date=null;   // open-ended — ignore any date
   return row;
@@ -608,12 +818,23 @@ function minInvestDisplay(o){
   if(o.min_investment_cents!=null)return money(o.min_investment_cents)+(o.fractional_allowed?' · fractional allowed':'');
   return o.fractional_allowed?'Fractional allowed':'—';}
 function closeDeadlineDisplay(o){return o.no_deadline?'Open-ended (no deadline)':fmtDate(o.final_close_date);}
-function investorFromBody(b){return{
-  name:str(b.name),entity_type:str(b.entity_type)||'Individual',contact_name:str(b.contact_name),email:str(b.email),
-  phone:str(b.phone),address:str(b.address),accredited_status:str(b.accredited_status)||'Unknown',
-  accredited_verified_date:str(b.accredited_verified_date),notes:str(b.notes)};}
+function investorFromBody(b){
+  const entity_type=str(b.entity_type)||'Individual';
+  const person=isPersonType(entity_type);
+  const first=str(b.first_name),middle=str(b.middle_name),last=str(b.last_name);
+  // Canonical display name: built from name parts for individuals, entity name otherwise.
+  let name=str(b.name);
+  if(person)name=[first,middle,last].filter(Boolean).join(' ')||name;
+  return{
+    name,entity_type,
+    first_name:person?first:null,middle_name:person?middle:null,last_name:person?last:null,
+    tax_id:str(b.tax_id),
+    contact_name:str(b.contact_name),email:str(b.email),
+    phone:str(b.phone),address:str(b.address),accredited_status:str(b.accredited_status)||'Unknown',
+    accredited_verified_date:str(b.accredited_verified_date),notes:str(b.notes)};}
 function subFromBody(b){return{
   investor_id:numOr(b.investor_id),amount_committed_cents:dollarsToCents(b.amount_committed),units:numOr(b.units),
+  costs_cents:dollarsToCents(b.costs),tranche_id:numOr(b.tranche_id),funded_date:str(b.funded_date),
   status:str(b.status)||'Prospect',sub_sent_date:str(b.sub_sent_date),sub_signed_date:str(b.sub_signed_date),notes:str(b.notes)};}
 function escrowFromBody(b){const type=str(b.txn_type)||'deposit';const valid=['deposit','release','refund','fee'];
   return{investor_id:numOr(b.investor_id),txn_type:valid.includes(type)?type:'deposit',
@@ -647,25 +868,54 @@ const api={
     db.escrow=db.escrow.filter(x=>x.offering_id!==id);db.tasks=db.tasks.filter(x=>x.offering_id!==id);
     db.reconciliations=db.reconciliations.filter(x=>x.offering_id!==id);await persist();return{ok:true};},
 
-  async listInvestors(){return db.investors.slice().sort((a,b)=>a.name.localeCompare(b.name,undefined,{sensitivity:'base'}))
+  // Tranches — sub-series within an offering that may carry their own terms.
+  async saveTranche(offeringId,b,trancheId){offeringId=Number(offeringId);
+    const o=db.offerings.find(x=>x.id===offeringId);if(!o)throw new Error('Offering not found');
+    if(!Array.isArray(o.tranches))o.tranches=[];
+    const row={name:str(b.name),price_per_unit_cents:dollarsToCents(b.price_per_unit),
+      min_investment_cents:dollarsToCents(b.min_investment),target_min_cents:dollarsToCents(b.target_min),
+      target_max_cents:dollarsToCents(b.target_max),security_type:str(b.security_type),
+      class_name:str(b.class_name),default_return_rate:numOr(b.default_return_rate),
+      close_date:str(b.close_date),notes:str(b.notes)};
+    if(!row.name)throw new Error('Tranche name is required');
+    if(trancheId){const t=o.tranches.find(x=>x.id===Number(trancheId));if(!t)throw new Error('Tranche not found');Object.assign(t,row);}
+    else o.tranches.push({id:o.tranches.reduce((m,t)=>Math.max(m,t.id||0),0)+1,...row});
+    o.updated_at=nowISO();await persist();return o;},
+  async deleteTranche(offeringId,trancheId){offeringId=Number(offeringId);trancheId=Number(trancheId);
+    const o=db.offerings.find(x=>x.id===offeringId);if(!o)throw new Error('Offering not found');
+    o.tranches=(o.tranches||[]).filter(t=>t.id!==trancheId);
+    db.subscriptions.forEach(s=>{if(s.offering_id===offeringId&&s.tranche_id===trancheId)s.tranche_id=null;});
+    o.updated_at=nowISO();await persist();return o;},
+
+  // Ownership classes — optional fixed split of the whole company by class
+  // (e.g. Common = 20%, Class A = 80%). A "sponsor" class is taken for holding
+  // the offering rather than for cash (feature: carried/promote interest).
+  async saveClasses(offeringId,classes){offeringId=Number(offeringId);
+    const o=db.offerings.find(x=>x.id===offeringId);if(!o)throw new Error('Offering not found');
+    o.classes=(classes||[]).map((c,idx)=>({id:c.id||idx+1,name:str(c.name)||`Class ${idx+1}`,
+      total_percent:numOr(c.total_percent),sponsor:c.sponsor?1:0})).filter(c=>c.name);
+    o.updated_at=nowISO();await persist();return o;},
+
+  async listInvestors(){return db.investors.slice().sort((a,b)=>investorSortKey(a).localeCompare(investorSortKey(b)))
     .map(i=>({...i,offering_count:db.subscriptions.filter(s=>s.investor_id===i.id).length}));},
   async getInvestor(id){id=Number(id);const inv=db.investors.find(x=>x.id===id);if(!inv)throw new Error('Investor not found');
     const subscriptions=db.subscriptions.filter(s=>s.investor_id===id).map(s=>{
       const o=db.offerings.find(x=>x.id===s.offering_id);return{...s,offering_name:o?o.name:'(deleted)'};})
       .sort((a,b)=>a.offering_name.localeCompare(b.offering_name));
     return{...inv,subscriptions};},
-  async createInvestor(b){const row=investorFromBody(b);if(!row.name)throw new Error('Investor name is required');
+  async createInvestor(b){const row=investorFromBody(b);if(!row.name)throw new Error(isPersonType(row.entity_type)?'A last name is required':'Investor / entity name is required');
     const inv={id:nextId('investors'),...row,created_at:nowISO(),updated_at:nowISO()};db.investors.push(inv);await persist();return inv;},
   async updateInvestor(id,b){id=Number(id);const inv=db.investors.find(x=>x.id===id);if(!inv)throw new Error('Investor not found');
-    const row=investorFromBody(b);if(!row.name)throw new Error('Investor name is required');Object.assign(inv,row,{updated_at:nowISO()});await persist();return inv;},
+    const row=investorFromBody(b);if(!row.name)throw new Error(isPersonType(row.entity_type)?'A last name is required':'Investor / entity name is required');Object.assign(inv,row,{updated_at:nowISO()});await persist();return inv;},
   async deleteInvestor(id){id=Number(id);const n=db.subscriptions.filter(s=>s.investor_id===id).length;
     if(n>0)throw new Error(`This investor is on ${n} offering subscription(s). Remove those first.`);
     db.investors=db.investors.filter(x=>x.id!==id);db.escrow.forEach(e=>{if(e.investor_id===id)e.investor_id=null;});await persist();return{ok:true};},
 
   async listSubscriptions(offeringId){offeringId=Number(offeringId);
-    return db.subscriptions.filter(s=>s.offering_id===offeringId).map(s=>{const i=db.investors.find(x=>x.id===s.investor_id)||{};
-      return{...s,investor_name:i.name,entity_type:i.entity_type,email:i.email,phone:i.phone,accredited_status:i.accredited_status};})
-      .sort((a,b)=>(a.investor_name||'').localeCompare(b.investor_name||''));},
+    return db.subscriptions.filter(s=>s.offering_id===offeringId).map(s=>{const i=db.investors.find(x=>x.id===s.investor_id);
+      return{...s,investor_name:i?investorDisplayName(i):null,investor_sort:i?investorSortKey(i):'',
+        entity_type:i?i.entity_type:null,email:i?i.email:null,phone:i?i.phone:null,accredited_status:i?i.accredited_status:null};})
+      .sort((a,b)=>(a.investor_sort||'').localeCompare(b.investor_sort||''));},
   async createSubscription(offeringId,b){offeringId=Number(offeringId);const row=subFromBody(b);
     if(!row.investor_id)throw new Error('Investor is required');if(!db.investors.find(x=>x.id===row.investor_id))throw new Error('Investor not found');
     const s={id:nextId('subscriptions'),offering_id:offeringId,...row,created_at:nowISO(),updated_at:nowISO()};db.subscriptions.push(s);await persist();return s;},
@@ -712,7 +962,7 @@ const api={
       .sort((a,b)=>(b.closing_date||b.created_at||'').localeCompare(a.closing_date||a.created_at||'')||b.id-a.id)
       .map(c=>{
         const subs=db.subscriptions.filter(s=>s.closing_id===c.id).map(s=>{const i=db.investors.find(x=>x.id===s.investor_id);
-          return{...s,investor_name:i?i.name:'(deleted investor)'};});
+          return{...s,investor_name:i?investorDisplayName(i):'(deleted investor)'};});
         return{...c,investors:subs,investor_count:subs.length};
       });
     return{closings,totalReleased:closings.reduce((a,c)=>a+(c.amount_released_cents||0),0)};},
@@ -738,25 +988,28 @@ const api={
     // Link and (optionally) close the included subscriptions.
     const markClosed=b.mark_closed!==false;
     for(const sid of subIds){const s=db.subscriptions.find(x=>x.id===sid&&x.offering_id===offeringId);
-      if(s){s.closing_id=closing.id;if(markClosed)s.status='Closed';s.updated_at=nowISO();}}
-    await persist();return closing;},
+      if(s){s.closing_id=closing.id;if(markClosed)s.status='Closed';if(!s.funded_date)s.funded_date=date;s.updated_at=nowISO();}}
+    // Auto-issue certificates for the included investors (feature: certificates on closing).
+    let certsIssued=0;
+    if(b.issue_certs!==false)certsIssued=generateCertificatesForClosing(offeringId,closing,subIds);
+    closing.certs_issued=certsIssued;
+    await persist();return{...closing,certsIssued};},
   async deleteClosing(id){id=Number(id);const c=db.closings.find(x=>x.id===id);if(!c)throw new Error('Closing not found');
-    // Reverse: remove its escrow entries and un-close its subscriptions.
+    // Reverse: remove its escrow entries, auto-issued certificates, and un-close its subscriptions.
     db.escrow=db.escrow.filter(e=>e.closing_id!==id);
+    db.certificates=db.certificates.filter(cert=>cert.closing_id!==id);
     db.subscriptions.forEach(s=>{if(s.closing_id===id){s.closing_id=null;if(s.status==='Closed')s.status='Funded';s.updated_at=nowISO();}});
     db.closings=db.closings.filter(x=>x.id!==id);await persist();return{ok:true};},
 
   // Certificate roster — units/interests issued to holders, possibly across
   // multiple classes/series, with % interest and accrued preferred return.
   async listCertificates(offeringId){offeringId=Number(offeringId);
-    const certs=db.certificates.filter(c=>c.offering_id===offeringId).map(c=>{
-      const i=db.investors.find(x=>x.id===c.investor_id);
-      return{...c,holder_name:i?i.name:(c.holder_name||null)};})
-      .sort((a,b)=>(a.class_name||'~').localeCompare(b.class_name||'~')||String(a.cert_number||'').localeCompare(String(b.cert_number||''),undefined,{numeric:true}));
-    const classNames=[...new Set(db.certificates.filter(c=>c.offering_id===offeringId).map(c=>c.class_name).filter(Boolean))];
-    return{certificates:certs,classNames,
-      totalCapital:certs.reduce((a,c)=>a+(c.capital_cents||0),0),
-      totalAccrued:certs.reduce((a,c)=>a+(c.accrued_cents||0),0)};},
+    const r=computeCertificates(offeringId);
+    return{certificates:r.certificates,classNames:r.classNames,classes:r.classes,classCapital:r.classCapital,
+      hasClassTotals:r.hasClassTotals,
+      totalCapital:r.totalCapital,
+      totalAccrued:r.certificates.reduce((a,c)=>a+(c.accrued_calc||0),0),
+      totalPercent:r.certificates.reduce((a,c)=>a+(Number(c.total_pct_calc)||0),0)};},
   async createCertificate(offeringId,b){offeringId=Number(offeringId);
     if(!db.offerings.find(x=>x.id===offeringId))throw new Error('Offering not found');
     const row=certFromBody(b);if(!row.cert_number)throw new Error('Certificate # is required');
@@ -764,11 +1017,26 @@ const api={
   async updateCertificate(id,b){id=Number(id);const c=db.certificates.find(x=>x.id===id);if(!c)throw new Error('Certificate not found');
     const row=certFromBody(b);if(!row.cert_number)throw new Error('Certificate # is required');Object.assign(c,row);await persist();return c;},
   async deleteCertificate(id){id=Number(id);db.certificates=db.certificates.filter(x=>x.id!==id);await persist();return{ok:true};},
+  // Re-assign every certificate number for an offering by funding-date order.
+  async renumberCertificates(offeringId){offeringId=Number(offeringId);
+    const certs=db.certificates.filter(c=>c.offering_id===offeringId);
+    certs.sort((a,b)=>{const fa=a.funded_date||a.issue_date||'',fb=b.funded_date||b.issue_date||'';
+      if(fa!==fb)return fa.localeCompare(fb);return (a.sort_index||0)-(b.sort_index||0)||a.id-b.id;});
+    certs.forEach((c,idx)=>{c.cert_number=String(idx+1);c.sort_index=idx+1;});
+    await persist();return{ok:true};},
 };
 function certFromBody(b){return{
   cert_number:str(b.cert_number),investor_id:numOr(b.investor_id),holder_name:str(b.holder_name),
-  class_name:str(b.class_name),capital_cents:dollarsToCents(b.capital),percent_interest:numOr(b.percent_interest),
-  pref_return_rate:numOr(b.pref_return_rate),accrued_cents:dollarsToCents(b.accrued),
+  class_name:str(b.class_name),capital_cents:b.no_capital?null:dollarsToCents(b.capital),
+  // pct_of_class: optional manual override of the holder's share WITHIN its class.
+  pct_of_class:numOr(b.pct_of_class),
+  // percent_interest: optional manual override of TOTAL % ownership (else computed).
+  percent_interest:numOr(b.percent_interest),
+  pref_return_rate:numOr(b.pref_return_rate),
+  // accrued_cents: optional manual override (else auto-computed to today).
+  accrued_cents:dollarsToCents(b.accrued),
+  funded_date:str(b.funded_date),accrual_start:str(b.accrual_start),
+  sort_index:numOr(b.sort_index),no_capital:b.no_capital?1:0,
   issue_date:str(b.issue_date),notes:str(b.notes)};}
 
 /* ============================================================================
@@ -783,6 +1051,7 @@ function openOfferingForm(existing,onDone){
       launch_date:existing.launch_date,first_close_date:existing.first_close_date,final_close_date:existing.final_close_date,
       form_d_filed_date:existing.form_d_filed_date,escrow_agent:existing.escrow_agent,escrow_bank:existing.escrow_bank,
       escrow_account_number:existing.escrow_account_number,notes:existing.notes,
+      default_return_rate:existing.default_return_rate??'',pass_through_costs:existing.pass_through_costs,costs_label:existing.costs_label,
       no_max:existing.no_max,fractional_allowed:existing.fractional_allowed,no_deadline:existing.no_deadline}:{status:'Drafting'},
     fields:[
       {name:'name',label:'Offering name',required:true,placeholder:'e.g. Acme Fund I'},
@@ -795,7 +1064,10 @@ function openOfferingForm(existing,onDone){
       {name:'no_max',label:'No maximum — uncapped raise',type:'checkbox',help:'Ignores the Maximum raise amount.'},
       {name:'price_per_unit',label:'Price per unit',type:'money',half:true},
       {name:'min_investment',label:'Minimum investment',type:'money',half:true},
+      {name:'default_return_rate',label:'Preferred return / interest rate (%)',type:'number',step:'any',half:true,help:'Default rate for certificates; accrues from the closing date.'},
       {name:'fractional_allowed',label:'Allow fractional investments / units (minimum may be waived)',type:'checkbox'},
+      {name:'pass_through_costs',label:'Pass legal / professional costs through to investors',type:'checkbox',help:'Adds a cost field to each subscription, charged on top of the investment.'},
+      {name:'costs_label',label:'Label for the pass-through cost',half:true,placeholder:'e.g. Legal & professional fees',showIf:v=>!!v.pass_through_costs},
       {name:'launch_date',label:'Launch date',type:'date',half:true},
       {name:'form_d_filed_date',label:'Form D filed',type:'date',half:true},
       {name:'first_close_date',label:'First / interim close',type:'date',half:true},
@@ -810,12 +1082,21 @@ function openOfferingForm(existing,onDone){
 }
 function openInvestorForm(existing,onDone){
   const isEdit=!!existing;
+  const person=v=>isPersonType(v.entity_type);
+  const isEntity=v=>!isPersonType(v.entity_type);
   formModal({title:isEdit?'Edit investor':'New investor',wide:true,submitLabel:isEdit?'Save changes':'Add investor',
     values:existing||{entity_type:'Individual',accredited_status:'Unknown'},
     fields:[
-      {name:'name',label:'Name',required:true,placeholder:'Investor or entity name'},
-      {name:'entity_type',label:'Type',type:'select',options:ENTITY_TYPES,half:true},
-      {name:'contact_name',label:'Contact person',half:true,help:'For entities/trusts'},
+      {name:'entity_type',label:'Investor type',type:'select',options:ENTITY_TYPES,half:true,
+        help:'Individuals are entered by first / middle / last name.'},
+      // Individual / person name fields.
+      {name:'first_name',label:'First name',half:true,required:true,showIf:person,placeholder:'e.g. Jane'},
+      {name:'middle_name',label:'Middle name',half:true,showIf:person,placeholder:'or initial'},
+      {name:'last_name',label:'Last name',half:true,required:true,showIf:person,placeholder:'e.g. Public'},
+      // Entity / trust name field.
+      {name:'name',label:'Entity / trust name',required:true,showIf:isEntity,placeholder:'e.g. Acme Holdings LLC'},
+      {name:'contact_name',label:'Contact person',half:true,showIf:isEntity,help:'Authorized signer / point of contact'},
+      {name:'tax_id',label:'SSN / EIN',half:true,placeholder:'Taxpayer ID',help:'SSN for individuals, EIN for entities.'},
       {name:'email',label:'Email',type:'email',half:true},
       {name:'phone',label:'Phone',type:'tel',half:true},
       {name:'accredited_status',label:'Accredited status',type:'select',options:ACCREDITED_STATUSES,half:true},
@@ -825,21 +1106,33 @@ function openInvestorForm(existing,onDone){
     onSubmit:async v=>{const saved=isEdit?await api.updateInvestor(existing.id,v):await api.createInvestor(v);
       toast(isEdit?'Investor updated.':'Investor added.','success');onDone?.(saved);}});
 }
-function openSubscriptionForm(offeringId,investors,existing,onDone){
+function openSubscriptionForm(offering,investors,existing,onDone){
+  const offeringId=typeof offering==='object'?offering.id:offering;
+  const o=typeof offering==='object'?offering:(db.offerings.find(x=>x.id===Number(offeringId))||{});
   const isEdit=!!existing;
-  formModal({title:isEdit?'Edit subscription':'Add investor to offering',submitLabel:isEdit?'Save changes':'Add',
+  const tranches=Array.isArray(o.tranches)?o.tranches:[];
+  const costLabel=o.costs_label?`${o.costs_label} passed through`:'Legal / professional costs (passed through)';
+  formModal({title:isEdit?'Edit subscription':'Add investor to offering',wide:true,submitLabel:isEdit?'Save changes':'Add',
     values:existing?{investor_id:existing.investor_id,amount_committed:centsToInput(existing.amount_committed_cents),
-      units:existing.units??'',status:existing.status,sub_sent_date:existing.sub_sent_date,sub_signed_date:existing.sub_signed_date,notes:existing.notes}:{status:'Prospect'},
+      costs:centsToInput(existing.costs_cents),tranche_id:existing.tranche_id??'',units:existing.units??'',
+      status:existing.status,sub_sent_date:existing.sub_sent_date,sub_signed_date:existing.sub_signed_date,
+      funded_date:existing.funded_date,notes:existing.notes}:{status:'Prospect'},
     fields:[
-      {name:'investor_id',label:'Investor',type:'select',required:true,
-        options:[{value:'',label:'— Select investor —'},...investors.map(i=>({value:i.id,label:i.name}))],
-        help:investors.length?null:'Add investors on the Investors tab first.'},
-      {name:'amount_committed',label:'Amount committed',type:'money',half:true},
+      {name:'investor_id',label:'Investor',required:true,type:'custom',
+        build:val=>investorPicker(investors,val),
+        help:investors.length?'Start typing a name to search your contact book.':'Add investors on the Investors tab first.'},
+      tranches.length?{name:'tranche_id',label:'Tranche',type:'select',half:true,
+        options:[{value:'',label:'— No specific tranche —'},...tranches.map(t=>({value:t.id,label:t.name}))],
+        help:'Tranches may carry their own terms.'}:null,
+      {name:'amount_committed',label:'Amount committed (investment)',type:'money',half:true},
+      o.pass_through_costs?{name:'costs',label:costLabel,type:'money',half:true,
+        help:'Fees the investor pays on top of the investment amount.'}:null,
       {name:'units',label:'Units',type:'number',half:true,step:'any'},
       {name:'status',label:'Status',type:'select',options:SUBSCRIPTION_STATUSES,half:true},
       {name:'sub_sent_date',label:'Sub agreement sent',type:'date',half:true},
       {name:'sub_signed_date',label:'Sub agreement signed',type:'date',half:true},
-      {name:'notes',label:'Notes',type:'textarea'}],
+      {name:'funded_date',label:'Funded date',type:'date',half:true,help:'Used to order certificate numbers.'},
+      {name:'notes',label:'Notes',type:'textarea'}].filter(Boolean),
     onSubmit:async v=>{if(isEdit)await api.updateSubscription(existing.id,v);else await api.createSubscription(offeringId,v);
       toast(isEdit?'Subscription updated.':'Investor added to offering.','success');onDone?.();}});
 }
@@ -851,9 +1144,9 @@ function openEscrowForm(offeringId,investors,existing,onDone){
     fields:[
       {name:'txn_type',label:'Type',type:'select',options:TXN_TYPES,half:true},
       {name:'amount',label:'Amount',type:'money',required:true,half:true},
-      {name:'investor_id',label:'Investor',type:'select',
-        options:[{value:'',label:'— None (issuer / fee) —'},...investors.map(i=>({value:i.id,label:i.name}))],
-        help:'Link deposits/refunds to the investor; leave blank for releases and fees.',half:true},
+      {name:'investor_id',label:'Investor',type:'custom',half:true,
+        build:val=>investorPicker(investors,val),
+        help:'Link deposits/refunds to the investor; leave blank for releases and fees.'},
       {name:'txn_date',label:'Date',type:'date',half:true},
       {name:'method',label:'Method',type:'select',options:['',...PAYMENT_METHODS],half:true},
       {name:'cleared',label:'Cleared at bank?',type:'select',options:[{value:'no',label:'Pending'},{value:'yes',label:'Cleared'}],half:true},
@@ -923,7 +1216,7 @@ function offeringCard(o){
       days!==null&&!['Closed','Terminated'].includes(o.status)?el('span',{class:days<=14&&days>=0?'urgent-text':''},`Close ${relDays(days)}`):el('span',{},o.no_deadline?'Open-ended':fmtDate(o.final_close_date))));
 }
 
-const TABS=['Overview','Investors','Escrow','Closings','Certificates','Checklist','Reconciliation'];
+const TABS=['Overview','Tranches','Investors','Escrow','Closings','Certificates','Checklist','Reconciliation'];
 async function renderOffering(id){
   const[offering,investors]=await Promise.all([api.getOffering(id),api.listInvestors()]);
   const state={offering,investors,tab:currentTab()};
@@ -933,7 +1226,8 @@ async function renderOffering(id){
     tabBar.querySelectorAll('.tab').forEach(b=>b.classList.toggle('active',b.textContent===t));drawTab();}
   async function reloadOffering(){state.offering=await api.getOffering(id);const nh=buildHeader();header.replaceWith(nh);header=nh;}
   async function drawTab(){clear(tabContent);tabContent.appendChild(el('div',{class:'loading'},'Loading…'));
-    const render={Overview:()=>overviewTab(state),Investors:()=>investorsTab(state,drawTab,reloadOffering),
+    const render={Overview:()=>overviewTab(state),Tranches:()=>tranchesTab(state,drawTab,reloadOffering),
+      Investors:()=>investorsTab(state,drawTab,reloadOffering),
       Escrow:()=>escrowTab(state,drawTab,reloadOffering),Closings:()=>closingsTab(state,drawTab,reloadOffering),
       Certificates:()=>certificatesTab(state),Checklist:()=>checklistTab(state),Reconciliation:()=>reconciliationTab(state)}[state.tab];
     const node=await render();clear(tabContent);tabContent.appendChild(node);}
@@ -984,21 +1278,81 @@ function overviewTab(state){
         el('div',{class:'progress-inline'},progressBar(s.tasksTotal?Math.round((s.tasksDone/s.tasksTotal)*100):0),
           el('span',{class:'progress-label'},`${s.tasksDone}/${s.tasksTotal} steps done`)))));
 }
+async function tranchesTab(state,drawTab,reloadOffering){
+  const offering=state.offering;
+  const tranches=Array.isArray(offering.tranches)?offering.tranches:[];
+  const subs=await api.listSubscriptions(offering.id);
+  const addBtn=el('button',{class:'btn btn-primary',onclick:()=>openTrancheForm(offering,null,async()=>{await reloadOffering();drawTab();})},'+ Add tranche');
+  const count=id=>subs.filter(s=>s.tranche_id===id).length;
+  const raised=id=>subs.filter(s=>s.tranche_id===id).reduce((a,s)=>a+(s.amount_committed_cents||0),0);
+  return el('div',{},
+    el('div',{class:'section-head'},el('h2',{},'Tranches'),addBtn),
+    el('p',{class:'muted-text',style:'margin:-6px 0 16px'},'Sub-series within this offering. Each tranche may carry its own price, minimums, return rate, class and closing terms. Investors and certificates can be assigned to a tranche.'),
+    !tranches.length?emptyState('No tranches yet. The whole offering is treated as a single series until you add one.',
+      el('button',{class:'btn btn-primary',onclick:()=>openTrancheForm(offering,null,async()=>{await reloadOffering();drawTab();})},'Add the first tranche')):
+    el('div',{class:'card-grid'},...tranches.map(t=>el('div',{class:'panel',style:'margin:0'},
+      el('div',{class:'oc-head'},el('div',{},el('h3',{class:'oc-name'},t.name),
+        el('div',{class:'oc-issuer'},[t.class_name,t.security_type].filter(Boolean).join(' · ')||'—')),
+        el('div',{class:'row-actions'},
+          el('button',{class:'icon-btn',title:'Edit',onclick:()=>openTrancheForm(offering,t,async()=>{await reloadOffering();drawTab();})},'✎'),
+          el('button',{class:'icon-btn danger',title:'Delete',onclick:async()=>{const ok=await confirmDialog(`Delete tranche “${t.name}”? Investors linked to it will be unassigned.`,{danger:true,confirmLabel:'Delete'});if(!ok)return;await api.deleteTranche(offering.id,t.id);toast('Tranche deleted.','success');await reloadOffering();drawTab();}},'🗑'))),
+      detailGrid([
+        ['Price per unit',t.price_per_unit_cents!=null?money(t.price_per_unit_cents):null],
+        ['Minimum investment',t.min_investment_cents!=null?money(t.min_investment_cents):null],
+        ['Min / max raise',[t.target_min_cents!=null?money(t.target_min_cents):null,t.target_max_cents!=null?money(t.target_max_cents):null].filter(Boolean).join(' / ')||null],
+        ['Return rate',t.default_return_rate!=null?fmtPct(t.default_return_rate):null],
+        ['Close date',t.close_date?fmtDate(t.close_date):null],
+        ['Investors',`${count(t.id)} · ${money(raised(t.id))} committed`]]),
+      t.notes?el('div',{class:'notes-block'},el('p',{},t.notes)):null))));
+}
+function openTrancheForm(offering,existing,onDone){
+  const isEdit=!!existing;
+  formModal({title:isEdit?'Edit tranche':'New tranche',wide:true,submitLabel:isEdit?'Save changes':'Add tranche',
+    values:existing?{name:existing.name,price_per_unit:centsToInput(existing.price_per_unit_cents),
+      min_investment:centsToInput(existing.min_investment_cents),target_min:centsToInput(existing.target_min_cents),
+      target_max:centsToInput(existing.target_max_cents),security_type:existing.security_type,class_name:existing.class_name,
+      default_return_rate:existing.default_return_rate??'',close_date:existing.close_date,notes:existing.notes}:{},
+    fields:[
+      {name:'name',label:'Tranche name',required:true,placeholder:'e.g. Tranche 1 / Series A-1'},
+      {name:'security_type',label:'Security type',type:'select',options:['',...SECURITY_TYPES],half:true},
+      {name:'class_name',label:'Ownership class',half:true,datalist:(offering.classes||[]).map(c=>c.name),placeholder:'e.g. Class A Units'},
+      {name:'price_per_unit',label:'Price per unit',type:'money',half:true},
+      {name:'min_investment',label:'Minimum investment',type:'money',half:true},
+      {name:'target_min',label:'Minimum raise',type:'money',half:true},
+      {name:'target_max',label:'Maximum raise',type:'money',half:true},
+      {name:'default_return_rate',label:'Preferred return / interest rate (%)',type:'number',step:'any',half:true},
+      {name:'close_date',label:'Tranche close date',type:'date',half:true},
+      {name:'notes',label:'Notes',type:'textarea'}],
+    onSubmit:async v=>{await api.saveTranche(offering.id,v,existing?existing.id:null);
+      toast(isEdit?'Tranche updated.':'Tranche added.','success');onDone?.();}});
+}
 async function investorsTab(state,drawTab,reloadOffering){
-  const subs=await api.listSubscriptions(state.offering.id);
+  const offering=state.offering;
+  const subs=await api.listSubscriptions(offering.id);
+  const tranches=Array.isArray(offering.tranches)?offering.tranches:[];
+  const trancheName=id=>{const t=tranches.find(x=>x.id===id);return t?t.name:null;};
   const committed=subs.reduce((a,s)=>a+(s.amount_committed_cents||0),0);
-  const addBtn=el('button',{class:'btn btn-primary',onclick:()=>openSubscriptionForm(state.offering.id,state.investors,null,async()=>{await reloadOffering();drawTab();})},'+ Add investor');
-  return el('div',{},el('div',{class:'section-head'},el('h2',{},`Investors — ${money(committed)} committed`),addBtn),
+  const costs=subs.reduce((a,s)=>a+(s.costs_cents||0),0);
+  const showCosts=!!offering.pass_through_costs;
+  const addBtn=el('button',{class:'btn btn-primary',onclick:()=>openSubscriptionForm(offering,state.investors,null,async()=>{await reloadOffering();drawTab();})},'+ Add investor');
+  const heading=`Investors — ${money(committed)} committed`+(showCosts?` · ${money(costs)} costs · ${money(committed+costs)} total due`:'');
+  return el('div',{},el('div',{class:'section-head'},el('h2',{},heading),addBtn),
     !subs.length?emptyState('No investors on this offering yet.',state.investors.length?null:el('a',{class:'btn btn-ghost',onclick:()=>navigate('/investors')},'Add investors to your contact book first')):
     el('table',{class:'data-table'},
-      el('thead',{},el('tr',{},el('th',{},'Investor'),el('th',{},'Accredited'),el('th',{},'Status'),el('th',{class:'num'},'Committed'),el('th',{class:'num'},'Units'),el('th',{},'Signed'),el('th',{},''))),
+      el('thead',{},el('tr',{},el('th',{},'Investor'),tranches.length?el('th',{},'Tranche'):null,el('th',{},'Accredited'),el('th',{},'Status'),
+        el('th',{class:'num'},'Committed'),showCosts?el('th',{class:'num'},'Costs'):null,showCosts?el('th',{class:'num'},'Total due'):null,
+        el('th',{class:'num'},'Units'),el('th',{},'Signed'),el('th',{},''))),
       el('tbody',{},...subs.map(s=>el('tr',{},
         el('td',{},el('a',{class:'link',onclick:()=>navigate(`/investors/${s.investor_id}`)},s.investor_name),el('div',{class:'cell-sub'},s.email||s.phone||s.entity_type)),
+        tranches.length?el('td',{},trancheName(s.tranche_id)||'—'):null,
         el('td',{},pill(s.accredited_status,ACCREDITED_KIND[s.accredited_status]||'muted')),
         el('td',{},pill(s.status,SUBSCRIPTION_KIND[s.status]||'muted')),
-        el('td',{class:'num'},money(s.amount_committed_cents)),el('td',{class:'num'},s.units??'—'),el('td',{},fmtDate(s.sub_signed_date)),
+        el('td',{class:'num'},money(s.amount_committed_cents)),
+        showCosts?el('td',{class:'num'},s.costs_cents?money(s.costs_cents):'—'):null,
+        showCosts?el('td',{class:'num'},money((s.amount_committed_cents||0)+(s.costs_cents||0))):null,
+        el('td',{class:'num'},s.units??'—'),el('td',{},fmtDate(s.sub_signed_date)),
         el('td',{class:'row-actions'},
-          el('button',{class:'icon-btn',title:'Edit',onclick:()=>openSubscriptionForm(state.offering.id,state.investors,s,async()=>{await reloadOffering();drawTab();})},'✎'),
+          el('button',{class:'icon-btn',title:'Edit',onclick:()=>openSubscriptionForm(offering,state.investors,s,async()=>{await reloadOffering();drawTab();})},'✎'),
           el('button',{class:'icon-btn danger',title:'Remove',onclick:async()=>{const ok=await confirmDialog(`Remove ${s.investor_name} from this offering?`,{danger:true,confirmLabel:'Remove'});if(!ok)return;await api.deleteSubscription(s.id);toast('Removed.','success');await reloadOffering();drawTab();}},'🗑')))))));
 }
 async function escrowTab(state,drawTab,reloadOffering){
@@ -1120,6 +1474,7 @@ function openClosingForm(offeringId,openSubs,existingCount,onDone){
   const feesInput=el('input',{type:'text',class:'inline-input money-input',placeholder:'0.00',inputmode:'decimal',style:'width:100%'});
   const notesInput=el('textarea',{rows:2,class:'inline-input',style:'width:100%'});
   const markClosed=el('input',{type:'checkbox',checked:true});
+  const issueCerts=el('input',{type:'checkbox',checked:true});
   let amountEdited=false;
   amountInput.addEventListener('input',()=>{amountEdited=true;});
   const checks=[];
@@ -1141,10 +1496,11 @@ function openClosingForm(offeringId,openSubs,existingCount,onDone){
     if(!amountInput.value.trim()&&!feesInput.value.trim()){errorBox.textContent='Enter the amount released to the issuer.';errorBox.style.display='block';return;}
     submitBtn.disabled=true;submitBtn.textContent='Saving…';
     try{
-      await api.createClosing(offeringId,{label:labelInput.value,closing_date:dateInput.value||null,
+      const res=await api.createClosing(offeringId,{label:labelInput.value,closing_date:dateInput.value||null,
         amount_released:amountInput.value,fees:feesInput.value,investor_sub_ids:selectedIds,
-        mark_closed:markClosed.checked,notes:notesInput.value||null});
-      toast('Closing recorded.','success');closeModal();onDone?.();
+        mark_closed:markClosed.checked,issue_certs:issueCerts.checked,notes:notesInput.value||null});
+      const n=res&&res.certsIssued||0;
+      toast(n?`Closing recorded — ${n} certificate${n===1?'':'s'} issued.`:'Closing recorded.','success');closeModal();onDone?.();
     }catch(err){errorBox.textContent=err.message;errorBox.style.display='block';submitBtn.disabled=false;submitBtn.textContent='Record closing';}
   }},
     field('Label',labelInput),
@@ -1154,6 +1510,8 @@ function openClosingForm(offeringId,openSubs,existingCount,onDone){
       el('div',{class:'form-row half'},el('label',{},'Fees / costs deducted'),el('div',{class:'money-wrap'},el('span',{class:'money-prefix'},'$'),feesInput))),
     field('Investors included in this closing',picklist,'Selected investors are marked Closed and linked to this closing. The release is recorded in the escrow ledger.'),
     el('label',{class:'pick-row',style:'padding-left:0'},markClosed,el('span',{},'Mark selected investors as “Closed”')),
+    el('label',{class:'pick-row',style:'padding-left:0'},issueCerts,el('span',{},'Issue certificates for the included investors'),
+      el('span',{class:'field-help'},'Numbered by funding date; capital, % interest and accrued return auto-populate.')),
     field('Notes',notesInput),
     errorBox,
     el('div',{class:'modal-actions'},el('button',{class:'btn btn-ghost',type:'button',onclick:closeModal},'Cancel'),submitBtn));
@@ -1162,59 +1520,113 @@ function openClosingForm(offeringId,openSubs,existingCount,onDone){
 }
 
 async function certificatesTab(state){
-  const[{certificates,classNames,totalCapital,totalAccrued},investors]=await Promise.all([
-    api.listCertificates(state.offering.id),api.listInvestors()]);
-  const addBtn=el('button',{class:'btn btn-primary',onclick:()=>openCertificateForm(state.offering.id,investors,classNames,null,()=>refresh())},'+ Add certificate');
+  const offering=state.offering;
+  const[data,investors]=await Promise.all([api.listCertificates(offering.id),api.listInvestors()]);
+  const{certificates,classNames,classes,totalCapital,totalAccrued,totalPercent}=data;
+  const allClassNames=[...new Set([...(classes||[]).map(c=>c.name),...classNames])];
+  const addBtn=el('button',{class:'btn btn-primary',onclick:()=>openCertificateForm(offering,investors,allClassNames,null,()=>refresh())},'+ Add certificate');
+  const renumBtn=certificates.length?el('button',{class:'btn btn-ghost btn-sm',title:'Re-assign all certificate numbers 1..N by funding date',
+    onclick:async()=>{const ok=await confirmDialog('Re-number every certificate 1…N in funding-date order? Any manual numbers will be replaced.',{confirmLabel:'Renumber'});
+      if(!ok)return;await api.renumberCertificates(offering.id);toast('Certificates renumbered by funding date.','success');refresh();}},'↕ Renumber by funding date'):null;
   const groups=new Map();
   for(const c of certificates){const k=c.class_name||'Unclassified';if(!groups.has(k))groups.set(k,[]);groups.get(k).push(c);}
   return el('div',{},
     el('div',{class:'stat-row'},
       statCard('Certificates',String(certificates.length)),
       statCard('Total capital contributed',money(totalCapital),{kind:'accent'}),
-      statCard('Classes / series',String(groups.size||0)),
-      statCard('Accrued return',money(totalAccrued),{sub:'interest / preferred'})),
-    el('div',{class:'section-head'},el('h2',{},'Certificate roster'),addBtn),
+      statCard('Total % ownership',fmtPct(totalPercent),{sub:groups.size>1?`${groups.size} classes`:'issued'}),
+      statCard('Accrued return to date',money(totalAccrued),{sub:'auto-calculated'})),
+    classStructurePanel(offering,classNames),
+    el('div',{class:'section-head'},el('h2',{},'Certificate roster'),el('div',{style:'display:flex;gap:8px'},renumBtn,addBtn)),
     !certificates.length
-      ? emptyState('No certificates issued yet.',el('button',{class:'btn btn-primary',onclick:()=>openCertificateForm(state.offering.id,investors,classNames,null,()=>refresh())},'Add the first certificate'))
-      : el('div',{},...[...groups.entries()].map(([cls,certs])=>certClassPanel(cls,certs,state.offering.id,investors,classNames))));
+      ? emptyState('No certificates issued yet. They are created automatically when you conduct a closing, or add one manually.',el('button',{class:'btn btn-primary',onclick:()=>openCertificateForm(offering,investors,allClassNames,null,()=>refresh())},'Add a certificate'))
+      : el('div',{},...[...groups.entries()].map(([cls,certs])=>certClassPanel(cls,certs,offering,investors,allClassNames))));
 }
-function certClassPanel(cls,certs,offeringId,investors,classNames){
+// Optional editor for fixed class ownership splits (e.g. Common 20% / Class A 80%).
+function classStructurePanel(offering,classNames){
+  const classes=Array.isArray(offering.classes)?offering.classes.map(c=>({...c})):[];
+  const open=classes.length>0;
+  const body=el('div',{style:open?'':'display:none'});
+  const rowsWrap=el('div',{class:'class-rows'});
+  function draw(){clear(rowsWrap);
+    classes.forEach((c,idx)=>{
+      const name=el('input',{class:'inline-input',value:c.name||'',placeholder:'Class name',oninput:e=>c.name=e.target.value});
+      const pct=el('input',{class:'inline-input',type:'number',step:'any',style:'width:110px',value:c.total_percent??'',placeholder:'% of co.',oninput:e=>c.total_percent=e.target.value===''?null:Number(e.target.value)});
+      const sponsor=el('input',{type:'checkbox',checked:!!c.sponsor,onchange:e=>c.sponsor=e.target.checked});
+      rowsWrap.appendChild(el('div',{class:'class-row'},
+        name,el('span',{class:'money-prefix',style:'padding:0'},''),pct,el('span',{class:'field-help'},'%'),
+        el('label',{class:'form-check',style:'font-size:13px'},sponsor,el('span',{},'Sponsor / non-cash')),
+        el('button',{class:'icon-btn danger',title:'Remove',onclick:()=>{classes.splice(idx,1);draw();}},'🗑')));});
+    const sum=classes.reduce((a,c)=>a+(Number(c.total_percent)||0),0);
+    rowsWrap.appendChild(el('div',{class:'field-help',style:'margin-top:6px'},
+      classes.length?`Defined classes total ${fmtPct(sum)} of the company.`:'No classes defined — % interest is pro-rated across all capital.'));
+  }
+  draw();
+  const addRow=el('button',{class:'btn btn-ghost btn-sm',onclick:()=>{classes.push({name:'',total_percent:null,sponsor:false});draw();}},'+ Add class');
+  const saveBtn=el('button',{class:'btn btn-primary btn-sm',onclick:async()=>{
+    await api.saveClasses(offering.id,classes);toast('Class structure saved.','success');refresh();}},'Save class structure');
+  const toggle=el('button',{class:'btn btn-ghost btn-sm',onclick:()=>{body.style.display=body.style.display==='none'?'':'none';}},
+    open?'Class structure':'Set up class ownership split…');
+  return el('section',{class:'panel'},
+    el('div',{class:'section-head',style:'margin:0'},el('h2',{style:'font-size:15px'},'Ownership classes (optional)'),toggle),
+    body,
+    (()=>{body.appendChild(el('p',{class:'field-help',style:'margin:4px 0 12px'},
+      'Define classes that each represent a fixed share of the whole company — e.g. Common Units = 20% (held by the sponsor for putting on the offering), Class A Units = 80% (sold to investors). Mark a class “sponsor / non-cash” when it is taken for holding the offering rather than for cash. Leave this empty to pro-rate % interest across all capital.'));
+      body.appendChild(rowsWrap);body.appendChild(el('div',{style:'display:flex;gap:8px;margin-top:12px'},addRow,saveBtn));return null;})());
+}
+function certClassPanel(cls,certs,offering,investors,classNames){
   const cap=certs.reduce((a,c)=>a+(c.capital_cents||0),0);
-  const pct=certs.reduce((a,c)=>a+(Number(c.percent_interest)||0),0);
-  const accr=certs.reduce((a,c)=>a+(c.accrued_cents||0),0);
+  const totPct=certs.reduce((a,c)=>a+(Number(c.total_pct_calc)||0),0);
+  const clsPct=certs.reduce((a,c)=>a+(Number(c.pct_of_class_calc)||0),0);
+  const accr=certs.reduce((a,c)=>a+(c.accrued_calc||0),0);
+  const classTotal=certs[0]&&certs[0].class_total_percent!=null?certs[0].class_total_percent:null;
+  const sponsor=certs[0]&&certs[0].class_sponsor;
   return el('section',{class:'panel'},
     el('h3',{style:'margin:0 0 12px;font-size:16px'},cls,
-      el('span',{class:'muted-text',style:'font-weight:400;font-size:13px'},`  ·  ${certs.length} certificate${certs.length===1?'':'s'} · ${money(cap)}`)),
+      sponsor?el('span',{class:'pill pill-info',style:'margin-left:8px;vertical-align:middle'},'Sponsor / non-cash'):null,
+      el('span',{class:'muted-text',style:'font-weight:400;font-size:13px'},
+        `  ·  ${certs.length} certificate${certs.length===1?'':'s'} · ${money(cap)}`+(classTotal!=null?` · class = ${fmtPct(classTotal)} of company`:''))),
     el('table',{class:'data-table'},
       el('thead',{},el('tr',{},el('th',{},'Cert #'),el('th',{},'Holder'),el('th',{class:'num'},'Capital'),
-        el('th',{class:'num'},'% interest'),el('th',{class:'num'},'Pref rate'),el('th',{class:'num'},'Accrued'),el('th',{},'Issued'),el('th',{},''))),
+        el('th',{class:'num'},'% of class'),el('th',{class:'num'},'Total %'),el('th',{class:'num'},'Pref rate'),el('th',{class:'num'},'Accrued'),el('th',{},'Issued'),el('th',{},''))),
       el('tbody',{},...certs.map(c=>el('tr',{},
         el('td',{},el('strong',{},c.cert_number)),el('td',{},c.holder_name||'—'),
-        el('td',{class:'num'},money(c.capital_cents)),el('td',{class:'num'},fmtPct(c.percent_interest)),
+        el('td',{class:'num'},c.capital_cents!=null?money(c.capital_cents):'—'),
+        el('td',{class:'num'},fmtPct(c.pct_of_class_calc)),
+        el('td',{class:'num'},fmtPct(c.total_pct_calc)),
         el('td',{class:'num'},c.pref_return_rate!=null?fmtPct(c.pref_return_rate):'—'),
-        el('td',{class:'num'},c.accrued_cents!=null?money(c.accrued_cents):'—'),el('td',{},fmtDate(c.issue_date)),
+        el('td',{class:'num'},c.accrued_calc!=null?money(c.accrued_calc):'—'),el('td',{},fmtDate(c.issue_date)),
         el('td',{class:'row-actions'},
-          el('button',{class:'icon-btn',title:'Edit',onclick:()=>openCertificateForm(offeringId,investors,classNames,c,()=>refresh())},'✎'),
+          el('button',{class:'icon-btn',title:'Edit',onclick:()=>openCertificateForm(offering,investors,classNames,c,()=>refresh())},'✎'),
           el('button',{class:'icon-btn danger',title:'Delete',onclick:async()=>{const ok=await confirmDialog(`Delete certificate ${c.cert_number}?`,{danger:true,confirmLabel:'Delete'});if(!ok)return;await api.deleteCertificate(c.id);toast('Deleted.','success');refresh();}},'🗑'))))),
       el('tfoot',{},el('tr',{},el('td',{},'Subtotal'),el('td',{},''),el('td',{class:'num'},money(cap)),
-        el('td',{class:'num'},fmtPct(pct)),el('td',{},''),el('td',{class:'num'},money(accr)),el('td',{colspan:'2'},'')))));
+        el('td',{class:'num'},fmtPct(clsPct)),el('td',{class:'num'},fmtPct(totPct)),el('td',{},''),el('td',{class:'num'},money(accr)),el('td',{colspan:'2'},'')))));
 }
-function openCertificateForm(offeringId,investors,classNames,existing,onDone){
+function openCertificateForm(offering,investors,classNames,existing,onDone){
+  const offeringId=typeof offering==='object'?offering.id:offering;
+  const o=typeof offering==='object'?offering:(db.offerings.find(x=>x.id===Number(offeringId))||{});
   const isEdit=!!existing;
+  const classOpts=[...new Set([...(o.classes||[]).map(c=>c.name),...(classNames||[])])];
   formModal({title:isEdit?'Edit certificate':'New certificate',wide:true,submitLabel:isEdit?'Save changes':'Add certificate',
     values:existing?{cert_number:existing.cert_number,investor_id:existing.investor_id??'',class_name:existing.class_name,
-      capital:centsToInput(existing.capital_cents),percent_interest:existing.percent_interest??'',
+      capital:centsToInput(existing.capital_cents),pct_of_class:existing.pct_of_class??'',percent_interest:existing.percent_interest??'',
       pref_return_rate:existing.pref_return_rate??'',accrued:centsToInput(existing.accrued_cents),
-      issue_date:existing.issue_date,notes:existing.notes}:{},
+      funded_date:existing.funded_date,issue_date:existing.issue_date,sort_index:existing.sort_index??'',
+      no_capital:existing.no_capital,notes:existing.notes}
+      :{class_name:defaultInvestedClass(o)||o.security_type||'',pref_return_rate:o.default_return_rate??''},
     fields:[
-      {name:'cert_number',label:'Certificate #',required:true,half:true,placeholder:'e.g. A-001'},
-      {name:'class_name',label:'Class / series',half:true,datalist:classNames,placeholder:'e.g. Class A Units'},
-      {name:'investor_id',label:'Holder',type:'select',options:[{value:'',label:'— Select investor —'},...investors.map(i=>({value:i.id,label:i.name}))],help:'Link to an investor in your contact book.'},
-      {name:'capital',label:'Capital contributed',type:'money',half:true},
-      {name:'percent_interest',label:'% interest',type:'number',step:'any',half:true,help:'Ownership % (may be fractional).'},
+      {name:'cert_number',label:'Certificate #',required:true,half:true,placeholder:'auto-assigned on closing'},
+      {name:'class_name',label:'Class / series',half:true,datalist:classOpts,placeholder:'e.g. Class A Units'},
+      {name:'investor_id',label:'Holder',type:'custom',build:val=>investorPicker(investors,val),help:'Start typing to search your contact book.'},
+      {name:'no_capital',label:'Sponsor / non-cash certificate (no capital contributed)',type:'checkbox',help:'For units taken for holding the offering rather than for cash.'},
+      {name:'capital',label:'Capital contributed',type:'money',half:true,showIf:v=>!v.no_capital,help:'Auto-fills from the investment amount on closing.'},
+      {name:'pct_of_class',label:'% of class (override)',type:'number',step:'any',half:true,help:'Leave blank to pro-rate within the class by capital.'},
+      {name:'percent_interest',label:'Total % ownership (override)',type:'number',step:'any',half:true,help:'Leave blank to auto-calculate.'},
       {name:'pref_return_rate',label:'Preferred return / interest rate (%)',type:'number',step:'any',half:true},
-      {name:'accrued',label:'Accrued return to date',type:'money',half:true,help:'Interest / preferred return accrued, if applicable.'},
-      {name:'issue_date',label:'Issue date',type:'date',half:true},
+      {name:'accrued',label:'Accrued return (override)',type:'money',half:true,help:'Leave blank to auto-calculate from the closing date to today.'},
+      {name:'funded_date',label:'Funded date',type:'date',half:true,help:'Determines certificate order.'},
+      {name:'issue_date',label:'Issue date',type:'date',half:true,help:'Auto-set to the closing date.'},
+      {name:'sort_index',label:'Order #',type:'number',step:'1',half:true,help:'Override sort order within class.'},
       {name:'notes',label:'Notes',type:'textarea'}],
     onSubmit:async v=>{if(isEdit)await api.updateCertificate(existing.id,v);else await api.createCertificate(offeringId,v);
       toast(isEdit?'Certificate updated.':'Certificate added.','success');onDone?.();}});
@@ -1223,31 +1635,48 @@ function openCertificateForm(offeringId,investors,classNames,existing,onDone){
 async function renderInvestors(){
   const investors=await api.listInvestors();
   const addBtn=el('button',{class:'btn btn-primary',onclick:()=>openInvestorForm(null,i=>navigate(`/investors/${i.id}`))},'+ New investor');
-  const tbody=el('tbody',{},...investors.map(investorRow));
-  const search=el('input',{class:'search-input',type:'search',placeholder:'Search investors…',oninput:e=>{const q=e.target.value.toLowerCase();
-    tbody.querySelectorAll('tr').forEach(tr=>{tr.style.display=tr.dataset.search.includes(q)?'':'none';});}});
-  return el('div',{},pageHeader('Investors',{subtitle:`${investors.length} contact${investors.length===1?'':'s'}`,actions:[addBtn]}),
-    !investors.length?emptyState('No investors yet.',el('button',{class:'btn btn-primary',onclick:()=>openInvestorForm(null,i=>navigate(`/investors/${i.id}`))},'Add your first investor')):
-    el('div',{},el('div',{class:'toolbar'},search),
+  // Group into sections by investor type; individuals shown Last, First M.
+  const groups=new Map();
+  for(const i of investors){const k=i.entity_type||'Other';if(!groups.has(k))groups.set(k,[]);groups.get(k).push(i);}
+  const orderedTypes=[...ENTITY_TYPE_ORDER,...[...groups.keys()].filter(k=>!ENTITY_TYPE_ORDER.includes(k))].filter(k=>groups.has(k));
+  const sections=el('div',{});
+  for(const type of orderedTypes){
+    const rows=groups.get(type);
+    const tbody=el('tbody',{},...rows.map(investorRow));
+    sections.appendChild(el('section',{class:'panel investor-group'},
+      el('div',{class:'section-head',style:'margin-top:0'},
+        el('h2',{style:'font-size:16px'},type,el('span',{class:'muted-text',style:'font-weight:400;font-size:13px'},`  ·  ${rows.length}`))),
       el('table',{class:'data-table hover'},
-        el('thead',{},el('tr',{},el('th',{},'Name'),el('th',{},'Type'),el('th',{},'Email'),el('th',{},'Phone'),el('th',{},'Accredited'),el('th',{class:'num'},'Offerings'))),tbody)));
+        el('thead',{},el('tr',{},el('th',{},'Name'),el('th',{},'SSN / EIN'),el('th',{},'Email'),el('th',{},'Phone'),el('th',{},'Accredited'),el('th',{class:'num'},'Offerings'))),tbody)));
+  }
+  const search=el('input',{class:'search-input',type:'search',placeholder:'Search investors…',oninput:e=>{const q=e.target.value.toLowerCase();
+    sections.querySelectorAll('.investor-group').forEach(sec=>{let any=false;
+      sec.querySelectorAll('tbody tr').forEach(tr=>{const show=tr.dataset.search.includes(q);tr.style.display=show?'':'none';if(show)any=true;});
+      sec.style.display=any?'':'none';});}});
+  return el('div',{},pageHeader('Investors',{subtitle:`${investors.length} contact${investors.length===1?'':'s'} in your contact book`,actions:[addBtn]}),
+    !investors.length?emptyState('No investors yet.',el('button',{class:'btn btn-primary',onclick:()=>openInvestorForm(null,i=>navigate(`/investors/${i.id}`))},'Add your first investor')):
+    el('div',{},el('div',{class:'toolbar'},search),sections));
 }
 function investorRow(i){
-  return el('tr',{dataset:{search:`${i.name} ${i.email||''} ${i.phone||''}`.toLowerCase()},onclick:()=>navigate(`/investors/${i.id}`)},
-    el('td',{},el('span',{class:'link'},i.name)),el('td',{},i.entity_type),el('td',{},i.email||'—'),el('td',{},i.phone||'—'),
+  const nm=investorListName(i);
+  return el('tr',{dataset:{search:`${nm} ${i.name||''} ${i.email||''} ${i.phone||''} ${i.tax_id||''}`.toLowerCase()},onclick:()=>navigate(`/investors/${i.id}`)},
+    el('td',{},el('span',{class:'link'},nm),i.contact_name?el('div',{class:'cell-sub'},i.contact_name):null),
+    el('td',{},fmtTaxId(i.tax_id)),el('td',{},i.email||'—'),el('td',{},i.phone||'—'),
     el('td',{},pill(i.accredited_status,ACCREDITED_KIND[i.accredited_status]||'muted')),el('td',{class:'num'},String(i.offering_count)));
 }
 async function renderInvestor(id){
   const inv=await api.getInvestor(id);
+  const dName=investorDisplayName(inv);
   const totalCommitted=inv.subscriptions.reduce((a,s)=>a+(s.amount_committed_cents||0),0);
-  async function del(){const ok=await confirmDialog(`Delete investor “${inv.name}”?`,{danger:true,confirmLabel:'Delete'});if(!ok)return;
+  async function del(){const ok=await confirmDialog(`Delete investor “${dName}”?`,{danger:true,confirmLabel:'Delete'});if(!ok)return;
     try{await api.deleteInvestor(inv.id);toast('Investor deleted.','success');navigate('/investors');}catch(e){toast(e.message,'error');}}
   return el('div',{class:'view-investor'},
-    pageHeader(inv.name,{back:{href:'#/investors',label:'All investors'},subtitle:inv.entity_type+(inv.contact_name?` · ${inv.contact_name}`:''),
+    pageHeader(dName,{back:{href:'#/investors',label:'All investors'},subtitle:inv.entity_type+(inv.contact_name?` · ${inv.contact_name}`:''),
       actions:[el('button',{class:'btn btn-ghost',onclick:()=>openInvestorForm(inv,()=>refresh())},'Edit'),el('button',{class:'btn btn-danger-ghost',onclick:del},'Delete')]}),
     el('div',{class:'grid-2'},
       el('section',{class:'panel'},el('h2',{class:'panel-title'},'Contact & accreditation'),
-        detailGrid([['Email',inv.email?el('a',{class:'link',href:`mailto:${inv.email}`},inv.email):'—'],['Phone',inv.phone],['Address',inv.address],
+        detailGrid([['Type',inv.entity_type],['SSN / EIN',fmtTaxId(inv.tax_id)],
+          ['Email',inv.email?el('a',{class:'link',href:`mailto:${inv.email}`},inv.email):'—'],['Phone',inv.phone],['Address',inv.address],
           ['Accredited status',pill(inv.accredited_status,ACCREDITED_KIND[inv.accredited_status]||'muted')],['Verified on',fmtDate(inv.accredited_verified_date)]]),
         inv.notes?el('div',{class:'notes-block'},el('h3',{},'Notes'),el('p',{},inv.notes)):null),
       el('section',{class:'panel'},el('h2',{class:'panel-title'},`Offerings — ${money(totalCommitted)} committed`),
@@ -1284,16 +1713,25 @@ function buildSummaryReport(o,subs,escrowData,reconData,closingsData,certsData){
       el('span',{class:'report-badge '+(minMet?'met':'no')},minMet?'✓ MINIMUM RAISE MET — closing may proceed':'MINIMUM RAISE NOT YET MET')),
   ]:[el('p',{class:'report-sub'},'No minimum raise is set for this offering.')];
 
+  const showCosts=!!o.pass_through_costs;
+  const totalCosts=subs.reduce((a,x)=>a+(x.costs_cents||0),0);
   const investorTable=subs.length?el('table',{class:'report-table'},
-    el('thead',{},el('tr',{},el('th',{},'Investor'),el('th',{},'Email'),el('th',{},'Phone'),el('th',{},'Accredited'),
-      el('th',{class:'num'},'Committed'),el('th',{class:'num'},'Units'),el('th',{},'Sub status'),el('th',{},'Signed'))),
+    el('thead',{},el('tr',{},el('th',{},'Investor'),el('th',{},'Email'),el('th',{},'Accredited'),
+      el('th',{class:'num'},'Committed'),showCosts?el('th',{class:'num'},'Costs'):null,showCosts?el('th',{class:'num'},'Total due'):null,
+      el('th',{class:'num'},'Units'),el('th',{},'Sub status'),el('th',{},'Signed'))),
     el('tbody',{},...subs.map(x=>el('tr',{},
       el('td',{},el('strong',{},x.investor_name||'—'),x.entity_type?el('div',{style:'color:#666;font-size:10px'},x.entity_type):null),
-      el('td',{},x.email||'—'),el('td',{},x.phone||'—'),el('td',{},x.accredited_status||'—'),
-      el('td',{class:'num'},money(x.amount_committed_cents)),el('td',{class:'num'},x.units??'—'),
+      el('td',{},x.email||'—'),el('td',{},x.accredited_status||'—'),
+      el('td',{class:'num'},money(x.amount_committed_cents)),
+      showCosts?el('td',{class:'num'},x.costs_cents?money(x.costs_cents):'—'):null,
+      showCosts?el('td',{class:'num'},money((x.amount_committed_cents||0)+(x.costs_cents||0))):null,
+      el('td',{class:'num'},x.units??'—'),
       el('td',{},x.status||'—'),el('td',{},fmtDate(x.sub_signed_date))))),
-    el('tfoot',{},el('tr',{},el('td',{colspan:'4'},`Total — ${subs.length} investor${subs.length===1?'':'s'} (${signedCount} signed/funded)`),
-      el('td',{class:'num'},money(committed)),el('td',{colspan:'3'},'')))
+    el('tfoot',{},el('tr',{},el('td',{colspan:'3'},`Total — ${subs.length} investor${subs.length===1?'':'s'} (${signedCount} signed/funded)`),
+      el('td',{class:'num'},money(committed)),
+      showCosts?el('td',{class:'num'},money(totalCosts)):null,
+      showCosts?el('td',{class:'num'},money(committed+totalCosts)):null,
+      el('td',{colspan:'3'},'')))
   ):el('p',{class:'report-sub'},'No investors recorded on this offering.');
 
   const txns=escrowData.transactions;
@@ -1340,12 +1778,12 @@ function buildSummaryReport(o,subs,escrowData,reconData,closingsData,certsData){
         el('td',{class:'num'},money(closings.reduce((a,c)=>a+(c.fees_cents||0),0))))))):null,
     certs.length?reportSection('Certificate roster',el('table',{class:'report-table'},
       el('thead',{},el('tr',{},el('th',{},'Cert #'),el('th',{},'Holder'),el('th',{},'Class'),el('th',{class:'num'},'Capital'),
-        el('th',{class:'num'},'% Interest'),el('th',{class:'num'},'Pref %'),el('th',{class:'num'},'Accrued'))),
+        el('th',{class:'num'},'% of Class'),el('th',{class:'num'},'Total %'),el('th',{class:'num'},'Pref %'),el('th',{class:'num'},'Accrued'))),
       el('tbody',{},...certs.map(c=>el('tr',{},el('td',{},c.cert_number),el('td',{},c.holder_name||'—'),el('td',{},c.class_name||'—'),
-        el('td',{class:'num'},money(c.capital_cents)),el('td',{class:'num'},fmtPct(c.percent_interest)),
-        el('td',{class:'num'},c.pref_return_rate!=null?fmtPct(c.pref_return_rate):'—'),el('td',{class:'num'},c.accrued_cents!=null?money(c.accrued_cents):'—')))),
+        el('td',{class:'num'},c.capital_cents!=null?money(c.capital_cents):'—'),el('td',{class:'num'},fmtPct(c.pct_of_class_calc)),el('td',{class:'num'},fmtPct(c.total_pct_calc)),
+        el('td',{class:'num'},c.pref_return_rate!=null?fmtPct(c.pref_return_rate):'—'),el('td',{class:'num'},c.accrued_calc!=null?money(c.accrued_calc):'—')))),
       el('tfoot',{},el('tr',{},el('td',{colspan:'3'},`Total — ${certs.length} certificate${certs.length===1?'':'s'}`),
-        el('td',{class:'num'},money(certsData.totalCapital)),el('td',{class:'num'},fmtPct(certs.reduce((a,c)=>a+(Number(c.percent_interest)||0),0))),
+        el('td',{class:'num'},money(certsData.totalCapital)),el('td',{},''),el('td',{class:'num'},fmtPct(certsData.totalPercent)),
         el('td',{},''),el('td',{class:'num'},money(certsData.totalAccrued)))))):null,
     reportSection('Escrow ledger',ledgerTable),
     latestRecon?reportSection('Latest bank reconciliation',reportKV([
@@ -1371,6 +1809,39 @@ async function printOfferingSummary(offeringId){
     window.addEventListener('afterprint',cleanup);
     setTimeout(()=>{window.print();},60);
   }catch(e){toast('Could not build the summary: '+e.message,'error');}
+}
+
+/* ============================================================================
+   GLOBAL "ADD" — quick-create anything from anywhere
+   ========================================================================== */
+// Pick an offering, then run cb(offering). Skips the picker if there's only one.
+async function pickOffering(prompt,cb){
+  const offerings=db.offerings.slice().sort((a,b)=>(a.name||'').localeCompare(b.name||''));
+  if(!offerings.length){toast('Create an offering first.','error');return;}
+  if(offerings.length===1){cb(offerings[0]);return;}
+  const list=el('div',{class:'qa-list'},...offerings.map(o=>el('button',{class:'qa-item',type:'button',onclick:()=>{closeModal();cb(o);}},
+    el('span',{class:'qa-item-title'},o.name),el('span',{class:'qa-item-desc'},[o.issuer_name,o.status].filter(Boolean).join(' · ')))));
+  openShell(prompt,el('div',{class:'modal-body'},list));
+}
+function openQuickAdd(){
+  const go=fn=>{closeModal();fn();};
+  const actions=[
+    {t:'New offering',d:'Start a new offering / raise',run:()=>openOfferingForm(null,o=>navigate(`/offerings/${o.id}`))},
+    {t:'New investor',d:'Add a person or entity to the contact book',run:()=>openInvestorForm(null,i=>navigate(`/investors/${i.id}`))},
+    {t:'Add investor to an offering',d:'Create a subscription',run:()=>pickOffering('Add an investor to which offering?',async o=>{
+      const investors=await api.listInvestors();openSubscriptionForm(o,investors,null,()=>refresh());})},
+    {t:'Record an escrow deposit',d:'Add an escrow ledger entry',run:()=>pickOffering('Record a deposit for which offering?',async o=>{
+      const investors=await api.listInvestors();openEscrowForm(o.id,investors,null,()=>refresh());})},
+    {t:'Conduct a closing',d:'Release escrow and issue certificates',run:()=>pickOffering('Conduct a closing on which offering?',async o=>{
+      const subs=await api.listSubscriptions(o.id);const open=subs.filter(s=>s.status!=='Withdrawn'&&!s.closing_id);
+      const closings=db.closings.filter(c=>c.offering_id===o.id);openClosingForm(o.id,open,closings.length,()=>refresh());})},
+    {t:'Add a certificate',d:'Issue a certificate manually',run:()=>pickOffering('Add a certificate to which offering?',async o=>{
+      const investors=await api.listInvestors();const{classNames,classes}=await api.listCertificates(o.id);
+      openCertificateForm(o,investors,[...new Set([...(classes||[]).map(c=>c.name),...classNames])],null,()=>refresh());})},
+  ];
+  const list=el('div',{class:'qa-list'},...actions.map(a=>el('button',{class:'qa-item',type:'button',onclick:()=>go(a.run)},
+    el('span',{class:'qa-item-title'},a.t),el('span',{class:'qa-item-desc'},a.d))));
+  openShell('Add',el('div',{class:'modal-body'},list));
 }
 
 /* ============================================================================
@@ -1412,6 +1883,7 @@ async function boot(){
   // Try to remember a previously connected file (needs a click to re-grant).
   if(FSA){try{const h=await idbGet('fileHandle');if(h)pendingHandle=h;}catch{}}
   renderFileStatus();
+  const addBtn=document.getElementById('global-add');if(addBtn)addBtn.addEventListener('click',openQuickAdd);
   router();
 }
 boot();
