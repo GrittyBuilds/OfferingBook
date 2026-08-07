@@ -39,25 +39,51 @@ to your last file with one click.
 
 ### What it tracks
 
+A floating **＋ Add** button in the sidebar lets you create anything — a new
+offering, an investor, a subscription, an escrow deposit, a closing, or a
+certificate — from any screen (it asks which offering when it needs one).
+
 - **Offerings** — issuer, exemption (Reg D 506(b)/506(c), Reg A, Reg CF, …),
   security type, target min/max raise, price per unit, key dates (launch, Form D,
   closings), escrow agent/bank/account, and status through the deal. Options
   include an **uncapped raise** (no maximum), **fractional investments allowed**
   (minimum may be waived), and an **open-ended offering** (no final close deadline).
-- **Certificate roster** — on the **Certificates** tab, record issued
-  certificates/units by **class or series** (multiple classes supported): cert #,
-  holder, capital contributed, **% interest**, preferred-return / interest rate,
-  and **accrued return** to date. The roster groups by class with per-class and
+  A default **preferred-return / interest rate** can be set for the offering.
+- **Pass-through costs** — offerings that charge legal / professional fees to
+  investors **on top of** their investment can turn this on; each subscription
+  then gets a cost field and the roster shows the **total due** (investment +
+  costs) per investor and in the printed summary.
+- **Tranches** — an offering can hold multiple **tranches** (sub-series), each
+  with its own price, minimums, min/max raise, class, return rate and close date.
+  Investors are assigned to a tranche when subscribing.
+- **Certificate roster** — on the **Certificates** tab, certificates are
+  **created automatically when you conduct a closing**: numbered in **funding-date
+  order** (re-numberable, or override individually), with capital contributed,
+  **% interest**, preferred-return rate, issue date and **accrued return to date**
+  all auto-populated (accrual = capital × rate × days from the closing date). You
+  can also add certificates by hand. The roster groups by class with per-class and
   overall subtotals, and is included in the printable summary.
+  - **Ownership classes** (optional) — define classes that each represent a fixed
+    share of the whole company (e.g. **Common Units = 20%**, **Class A Units =
+    80%**). Within a class, holders split by capital, so each certificate shows
+    both its **% of its class** and its **total % ownership**. A class can be
+    marked **sponsor / non-cash** for units taken for *holding* the offering
+    rather than for cash — e.g. the sponsor takes 100% of the Common Units (20% of
+    the company) while investors hold 100% of the Class A Units (80%).
 - **A built-in process checklist** seeded on every new offering (engagement
   letter → draft PPM → set up escrow → file Form D → collect subs → verify
   accreditation → min-raise met → closing → release funds → post-closing), which
   you can edit.
-- **Investors** — a reusable contact book: name, entity type, email, phone,
-  address, accredited-investor status and verification date, notes. See every
-  offering an investor is in.
+- **Investors** — a reusable contact book organized into **sections by investor
+  type**. Individuals are entered by **first / middle / last name** and listed and
+  sorted **last name, first name, middle initial**; entities and trusts are entered
+  by entity name with a contact person. Every investor has an **SSN / EIN** field
+  (masked in lists), plus email, phone, address, accredited-investor status and
+  verification date, and notes. See every offering an investor is in.
 - **Subscriptions** — link investors to an offering with amount committed, units,
-  and subscription-agreement status (sent / signed / funded / closed).
+  optional tranche and pass-through costs, funded date, and subscription-agreement
+  status (sent / signed / funded / closed). When adding an investor to an offering,
+  **type the name to search** your contact book.
 - **Escrow ledger** — deposits, releases, refunds and fees, each pending or
   cleared, with a running **book balance** and **cleared balance**.
   - **Closing conditions / min-raise:** the offering flags when cleared escrow
@@ -109,3 +135,10 @@ npm start          # then open http://localhost:4000
 Its data lives in `node-server/data/capitalvault.db`. Note that the two versions
 store data separately and do not share it — pick one and stick with it. See the
 code under `node-server/` for details.
+
+> The newest features — the global **＋ Add** button, split first/middle/last
+> investor names with SSN/EIN and grouped contact book, pass-through costs,
+> **tranches**, **ownership classes / sponsor units**, and **automatic
+> certificate creation on closing** — are implemented in the recommended
+> single-file `CapitalVault.html`. The optional server version does not include
+> them.
