@@ -1,0 +1,603 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Muniment — Brand Guide</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect x='6' y='9' width='12' height='32' rx='1.5' fill='%2314453F'/><rect x='26' y='25' width='12' height='16' rx='1.5' fill='%2314453F'/><rect x='46' y='9' width='12' height='32' rx='1.5' fill='%2314453F'/><rect x='6' y='45' width='52' height='10' rx='1.5' fill='%23A8813C'/></svg>">
+<style>
+:root{
+  --paper:#F6F5F1; --surface:#FFFFFF; --surface-2:#FAF9F6;
+  --border:#E5E2DA; --border-strong:#D4D0C5;
+  --ink:#14181C; --ink-2:#4A535C; --ink-3:#646E78;
+  --brand:#14453F; --brand-2:#1E635A; --brand-soft:#E7EFED;
+  --brass:#A8813C; --brass-text:#7A5C24; --brass-soft:#F7F1E4;
+  --sans:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;
+  --serif:'Newsreader','Iowan Old Style','Palatino Linotype',Palatino,'Book Antiqua',Georgia,serif;
+  --mono:ui-monospace,SFMono-Regular,'SF Mono',Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.62;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1000px;margin:0 auto;padding:0 28px 110px}
+
+/* ---------- cover ---------- */
+.cover{padding:76px 0 46px;border-bottom:1px solid var(--border);margin-bottom:8px}
+.cover .lockup{display:flex;align-items:center;gap:20px;margin-bottom:34px}
+.cover svg{width:74px;height:74px;flex:none}
+.cover .wm{font-family:var(--serif);font-size:52px;letter-spacing:.14em;text-transform:uppercase;font-weight:400;line-height:1;color:var(--brand)}
+h1{font-family:var(--serif);font-weight:400;font-size:clamp(28px,4.4vw,40px);line-height:1.16;letter-spacing:-.01em;margin:0 0 14px}
+.lede{font-size:16.5px;color:var(--ink-2);max-width:68ch;margin:0}
+.stamp{display:inline-block;margin-bottom:16px;font-size:10.5px;font-weight:700;letter-spacing:.18em;text-transform:uppercase;color:var(--brass-text);background:var(--brass-soft);border:1px solid #E8DCC0;padding:5px 11px;border-radius:3px}
+
+/* ---------- sections ---------- */
+section{padding:56px 0;border-bottom:1px solid var(--border)}
+section:last-of-type{border-bottom:0}
+.sec-no{font-family:var(--mono);font-size:11px;color:var(--brass-text);letter-spacing:.1em;margin:0 0 6px}
+h2{font-family:var(--serif);font-weight:400;font-size:30px;letter-spacing:-.01em;margin:0 0 10px}
+.sec-intro{color:var(--ink-2);max-width:72ch;margin:0 0 30px;font-size:15.5px}
+h3{font-size:11px;font-weight:700;letter-spacing:.15em;text-transform:uppercase;color:var(--ink-3);margin:34px 0 14px}
+p{margin:0 0 14px;max-width:74ch}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:26px 28px;margin-bottom:16px}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.three{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+@media(max-width:800px){.two,.three{grid-template-columns:1fr}}
+code{font-family:var(--mono);font-size:12.5px;background:var(--surface-2);border:1px solid var(--border);padding:1px 5px;border-radius:3px;color:var(--brand)}
+
+/* ---------- rules list ---------- */
+.rules{list-style:none;margin:0;padding:0}
+.rules li{padding:11px 0 11px 30px;border-bottom:1px solid var(--border);position:relative;font-size:14.5px;color:var(--ink-2)}
+.rules li:last-child{border-bottom:0}
+.rules li::before{content:'';position:absolute;left:8px;top:20px;width:6px;height:6px;border-radius:50%;background:var(--brass)}
+.rules b{color:var(--ink)}
+.rules.no li::before{background:#97302F}
+.rules.yes li::before{background:#16694F}
+
+/* ---------- logo specimens ---------- */
+.spec{background:var(--surface);border:1px solid var(--border);border-radius:6px;overflow:hidden;margin-bottom:16px}
+.spec .stage{padding:44px 28px;display:flex;align-items:center;justify-content:center;min-height:150px}
+.spec .stage.dark{background:#0F1416}
+.spec .stage.brand{background:var(--brand)}
+.spec .cap{padding:12px 18px;border-top:1px solid var(--border);font-size:12.5px;color:var(--ink-3);background:var(--surface-2);display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.spec .cap b{color:var(--ink-2);font-weight:600}
+.lk{display:flex;align-items:center;gap:14px}
+.lk svg{flex:none}
+.lk .wm{font-family:var(--serif);letter-spacing:.14em;text-transform:uppercase;font-weight:400;line-height:1}
+.lk-stack{flex-direction:column;gap:14px}
+
+/* ---------- color ---------- */
+.swatches{display:grid;grid-template-columns:repeat(auto-fill,minmax(168px,1fr));gap:12px}
+.sw{border:1px solid var(--border);border-radius:6px;overflow:hidden;background:var(--surface)}
+.sw .chipc{height:76px}
+.sw .info{padding:11px 13px}
+.sw .nm{font-size:13px;font-weight:600;margin-bottom:2px}
+.sw .hx{font-family:var(--mono);font-size:11.5px;color:var(--ink-3);text-transform:uppercase}
+.sw .use{font-size:11.5px;color:var(--ink-3);margin-top:5px;line-height:1.45}
+
+table.contrast{width:100%;border-collapse:collapse;font-size:13.5px;margin-top:8px}
+table.contrast th{text-align:left;font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3);font-weight:700;padding:9px 10px;border-bottom:1px solid var(--border-strong)}
+table.contrast td{padding:10px;border-bottom:1px solid var(--border);vertical-align:middle}
+table.contrast td:nth-child(3),table.contrast td:nth-child(4){font-family:var(--mono);font-size:12.5px;text-align:right;white-space:nowrap}
+.pass{color:#16694F;font-weight:700}
+.fail{color:#97302F;font-weight:700}
+.sample{display:inline-block;padding:3px 9px;border-radius:3px;font-size:13px;font-weight:500}
+
+/* ---------- type ---------- */
+.tsample{border-bottom:1px solid var(--border);padding:16px 0;display:flex;align-items:baseline;gap:22px;flex-wrap:wrap}
+.tsample:last-child{border-bottom:0}
+.tsample .meta{font-family:var(--mono);font-size:11px;color:var(--ink-3);width:190px;flex:none;line-height:1.5}
+.tsample .demo{flex:1;min-width:220px;color:var(--ink)}
+
+/* ---------- do / don't ---------- */
+.dd{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+@media(max-width:800px){.dd{grid-template-columns:1fr}}
+.dd .box{border:1px solid var(--border);border-radius:6px;background:var(--surface);overflow:hidden}
+.dd .hdr{padding:10px 16px;font-size:10.5px;font-weight:700;letter-spacing:.14em;text-transform:uppercase}
+.dd .good .hdr{background:#E6F2ED;color:#16694F}
+.dd .bad .hdr{background:#F9E9E8;color:#97302F}
+.dd .inner{padding:16px 18px;font-size:14px;color:var(--ink-2)}
+.dd .inner p{margin:0 0 10px}
+.dd .inner p:last-child{margin:0}
+.dd .q{font-family:var(--serif);font-size:16px;color:var(--ink)}
+
+/* ---------- applications ---------- */
+.app-frame{border:1px solid var(--border-strong);border-radius:8px;overflow:hidden;background:var(--surface)}
+.mini-app{display:flex;min-height:230px;font-size:12px}
+.mini-side{width:150px;background:var(--brand);color:#CFE0DC;padding:14px 12px;flex:none}
+.mini-side .b{display:flex;align-items:center;gap:8px;margin-bottom:16px}
+.mini-side .b .wm{font-family:var(--serif);font-size:14px;letter-spacing:.13em;text-transform:uppercase;color:#fff}
+.mini-side .add{background:var(--brass);color:#221803;font-weight:700;font-size:11px;text-align:center;padding:7px;border-radius:5px;margin-bottom:14px}
+.mini-side .n{padding:6px 9px;border-radius:5px;margin-bottom:2px}
+.mini-side .n.on{background:rgba(255,255,255,.12);color:#fff;font-weight:600}
+.mini-main{flex:1;padding:16px 18px;background:var(--paper)}
+.mini-main .t{font-size:16px;font-weight:600;margin-bottom:3px}
+.mini-main .s{color:var(--ink-3);font-size:11px;margin-bottom:13px}
+.mini-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:9px}
+.mini-stat{background:var(--surface);border:1px solid var(--border);border-radius:5px;padding:9px 11px}
+.mini-stat .l{font-size:8.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3);font-weight:700}
+.mini-stat .v{font-size:17px;font-weight:700;margin-top:3px;font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+.mini-stat.acc .v{color:var(--brass-text)}
+.mini-bar{height:5px;background:var(--border);border-radius:20px;margin-top:14px;overflow:hidden}
+.mini-bar i{display:block;height:100%;width:64%;background:var(--brass)}
+
+.letterhead{padding:26px 30px;background:#fff;font-size:11px;color:#222}
+.lh-head{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid var(--brand);padding-bottom:10px;margin-bottom:14px}
+.lh-head .l{display:flex;align-items:center;gap:11px}
+.lh-head .wm{font-family:var(--serif);font-size:18px;letter-spacing:.14em;text-transform:uppercase;color:var(--brand)}
+.lh-head .r{text-align:right;font-size:9.5px;color:#666;line-height:1.6}
+.lh-title{font-family:var(--serif);font-size:17px;margin:0 0 3px}
+.lh-sub{color:#666;font-size:10.5px;margin-bottom:14px}
+.lh-tbl{width:100%;border-collapse:collapse;font-size:10px}
+.lh-tbl th{background:var(--brand-soft);color:var(--brand);border:1px solid #C9D8D4;padding:4px 7px;text-align:left;font-size:8.5px;letter-spacing:.08em;text-transform:uppercase}
+.lh-tbl td{border:1px solid #ddd;padding:4px 7px}
+.lh-tbl td.n{text-align:right;font-variant-numeric:tabular-nums}
+.lh-foot{margin-top:14px;padding-top:7px;border-top:1px solid #bbb;font-size:8.5px;color:#777;line-height:1.55}
+
+.cert{background:#FCFBF7;border:1px solid var(--border);padding:30px 34px;text-align:center;position:relative}
+.cert::before,.cert::after{content:'';position:absolute;left:14px;right:14px;height:1px;background:var(--brass);opacity:.5}
+.cert::before{top:14px}.cert::after{bottom:14px}
+.cert .ck{font-size:9.5px;letter-spacing:.26em;text-transform:uppercase;color:var(--brass-text);margin-bottom:12px}
+.cert .cn{font-family:var(--serif);font-size:23px;margin-bottom:5px}
+.cert .cs{font-size:11.5px;color:var(--ink-2);margin-bottom:16px}
+.cert .cnum{font-family:var(--mono);font-size:11px;color:var(--ink-3);letter-spacing:.06em}
+
+/* ---------- voice ---------- */
+.voice-tbl{width:100%;border-collapse:collapse;font-size:14px}
+.voice-tbl th{text-align:left;font-size:10.5px;letter-spacing:.13em;text-transform:uppercase;color:var(--ink-3);font-weight:700;padding:9px 12px;border-bottom:1px solid var(--border-strong)}
+.voice-tbl td{padding:12px;border-bottom:1px solid var(--border);vertical-align:top;width:50%}
+.voice-tbl td.was{color:var(--ink-3);text-decoration:line-through;text-decoration-color:#D9BEBD}
+.voice-tbl td.now{color:var(--ink);font-weight:500}
+
+footer{padding:36px 0 0;font-size:12.5px;color:var(--ink-3);display:flex;justify-content:space-between;gap:14px;flex-wrap:wrap}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<!-- ══════════ COVER ══════════ -->
+<div class="cover">
+  <div class="lockup">
+    <svg viewBox="0 0 64 64" aria-label="Muniment mark">
+      <rect x="6" y="9" width="12" height="32" rx="1.5" fill="#14453F"/>
+      <rect x="26" y="25" width="12" height="16" rx="1.5" fill="#14453F"/>
+      <rect x="46" y="9" width="12" height="32" rx="1.5" fill="#14453F"/>
+      <rect x="6" y="45" width="52" height="10" rx="1.5" fill="#A8813C"/>
+    </svg>
+    <span class="wm">Muniment</span>
+  </div>
+  <span class="stamp">Brand guide · Stage 2 of 4 · August 2026</span>
+  <h1>The system of record for private offerings.</h1>
+  <p class="lede">Muniment replaces CapitalVault. This document defines the name, the mark, the color and type systems in light and dark, the rules for numbers and dates, and the voice — everything needed to apply the brand consistently across the interface, the printed reports, and the certificates.</p>
+</div>
+
+<!-- ══════════ 01 THE NAME ══════════ -->
+<section>
+  <p class="sec-no">01</p>
+  <h2>The name</h2>
+  <p class="sec-intro">A muniment is a document held as evidence of title — proof of what a person owns and the means to defend it. The word comes from the Latin <em>munire</em>, to fortify. It is the exact category of thing this software holds.</p>
+
+  <div class="card">
+    <div class="two">
+      <div>
+        <h3 style="margin-top:0">Pronunciation</h3>
+        <p style="font-family:var(--serif);font-size:22px;margin:0 0 4px">MYOO&#8239;·&#8239;nih&#8239;·&#8239;ment</p>
+        <p style="font-size:13.5px;color:var(--ink-3);margin:0">Stress the first syllable. Rhymes with <em>monument</em> but begins with the "mew" of <em>music</em>.</p>
+      </div>
+      <div>
+        <h3 style="margin-top:0">The one-line explainer</h3>
+        <p style="font-size:14.5px;margin:0;color:var(--ink-2)">Use this verbatim in the About screen and the report footer:</p>
+        <p style="font-family:var(--serif);font-size:16px;margin:10px 0 0;color:var(--ink)">"Muniments of title: the documents by which ownership is proved."</p>
+      </div>
+    </div>
+  </div>
+
+  <h3>Written usage</h3>
+  <ul class="rules">
+    <li><b>Muniment</b> — initial capital, never all-caps in running text, never <code>MUNIMENT</code> outside the wordmark itself.</li>
+    <li>It takes no article. Write <b>"open Muniment"</b> and <b>"recorded in Muniment"</b> — never "the Muniment."</li>
+    <li>It is a proper noun, not a common one. Never <b>"a muniment file"</b> or <b>"muniments"</b> when you mean the software.</li>
+    <li>No suffix. It is not "Muniment App," "Muniment Pro," or "Muniment System." The product is Muniment.</li>
+    <li>Data files, exports, and storage keys use the lowercase slug <code>muniment</code> — for example <code>muniment-backup-2026-08-18.json</code>.</li>
+    <li>The short form <b>Muni</b> is acceptable in casual internal speech but never appears in the interface or in anything printed. In securities contexts "muni" already means a municipal bond.</li>
+  </ul>
+
+  <h3>Taglines</h3>
+  <ul class="rules">
+    <li><b>The system of record for private offerings.</b> &nbsp;— primary. Descriptive, states the category, safe on a client-facing cover page.</li>
+    <li><b>Proof of title, in order.</b> &nbsp;— short form for the sidebar footer or a favicon-sized context.</li>
+    <li><b>Every subscription, allotment, and dollar — on the record.</b> &nbsp;— long form for an About screen.</li>
+    <li><b>What is held, and by whom.</b> &nbsp;— the plainest option; works well set in serif under the mark.</li>
+  </ul>
+</section>
+
+<!-- ══════════ 02 THE MARK ══════════ -->
+<section>
+  <p class="sec-no">02</p>
+  <h2>The mark</h2>
+  <p class="sec-intro">Three vertical forms on a solid base. Read one way it is a battlement — the crenellated wall that gives <em>munire</em> its meaning. Read another it is the shoulder rhythm of an <b>M</b>, or a set of records standing on a common ledger line. The brass base is the constant: the foundation the record rests on.</p>
+
+  <div class="spec">
+    <div class="stage">
+      <div class="lk">
+        <svg viewBox="0 0 64 64" width="60" height="60">
+          <rect x="6" y="9" width="12" height="32" rx="1.5" fill="#14453F"/>
+          <rect x="26" y="25" width="12" height="16" rx="1.5" fill="#14453F"/>
+          <rect x="46" y="9" width="12" height="32" rx="1.5" fill="#14453F"/>
+          <rect x="6" y="45" width="52" height="10" rx="1.5" fill="#A8813C"/>
+        </svg>
+        <span class="wm" style="font-size:38px;color:#14453F">Muniment</span>
+      </div>
+    </div>
+    <div class="cap"><b>Primary horizontal lockup</b><span>Default everywhere. Minimum width 132&nbsp;px.</span></div>
+  </div>
+
+  <div class="two">
+    <div class="spec">
+      <div class="stage dark">
+        <div class="lk">
+          <svg viewBox="0 0 64 64" width="46" height="46">
+            <rect x="6" y="9" width="12" height="32" rx="1.5" fill="#4FA396"/>
+            <rect x="26" y="25" width="12" height="16" rx="1.5" fill="#4FA396"/>
+            <rect x="46" y="9" width="12" height="32" rx="1.5" fill="#C9A15C"/>
+            <rect x="6" y="45" width="52" height="10" rx="1.5" fill="#C9A15C"/>
+          </svg>
+          <span class="wm" style="font-size:28px;color:#E7EBE9">Muniment</span>
+        </div>
+      </div>
+      <div class="cap"><b>Dark lockup</b><span>Lightened brand + brass.</span></div>
+    </div>
+    <div class="spec">
+      <div class="stage brand">
+        <div class="lk lk-stack">
+          <svg viewBox="0 0 64 64" width="44" height="44">
+            <rect x="6" y="9" width="12" height="32" rx="1.5" fill="#FFFFFF"/>
+            <rect x="26" y="25" width="12" height="16" rx="1.5" fill="#FFFFFF"/>
+            <rect x="46" y="9" width="12" height="32" rx="1.5" fill="#FFFFFF"/>
+            <rect x="6" y="45" width="52" height="10" rx="1.5" fill="#C9A15C"/>
+          </svg>
+          <span class="wm" style="font-size:22px;color:#fff">Muniment</span>
+        </div>
+      </div>
+      <div class="cap"><b>Stacked, reversed</b><span>Cover pages, splash, letterhead.</span></div>
+    </div>
+  </div>
+
+  <div class="three">
+    <div class="spec">
+      <div class="stage" style="min-height:120px;gap:26px">
+        <svg viewBox="0 0 64 64" width="52" height="52">
+          <rect x="6" y="9" width="12" height="32" rx="1.5" fill="#14453F"/><rect x="26" y="25" width="12" height="16" rx="1.5" fill="#14453F"/><rect x="46" y="9" width="12" height="32" rx="1.5" fill="#14453F"/><rect x="6" y="45" width="52" height="10" rx="1.5" fill="#A8813C"/>
+        </svg>
+        <svg viewBox="0 0 64 64" width="30" height="30">
+          <rect x="6" y="9" width="12" height="32" rx="1.5" fill="#14453F"/><rect x="26" y="25" width="12" height="16" rx="1.5" fill="#14453F"/><rect x="46" y="9" width="12" height="32" rx="1.5" fill="#14453F"/><rect x="6" y="45" width="52" height="10" rx="1.5" fill="#A8813C"/>
+        </svg>
+        <svg viewBox="0 0 64 64" width="16" height="16">
+          <rect x="6" y="9" width="12" height="32" fill="#14453F"/><rect x="26" y="25" width="12" height="16" fill="#14453F"/><rect x="46" y="9" width="12" height="32" fill="#14453F"/><rect x="6" y="45" width="52" height="10" fill="#A8813C"/>
+        </svg>
+      </div>
+      <div class="cap"><b>Mark alone</b><span>52 / 30 / 16&nbsp;px</span></div>
+    </div>
+    <div class="spec">
+      <div class="stage" style="min-height:120px">
+        <svg viewBox="0 0 64 64" width="52" height="52">
+          <rect x="6" y="9" width="12" height="32" rx="1.5" fill="#14181C"/><rect x="26" y="25" width="12" height="16" rx="1.5" fill="#14181C"/><rect x="46" y="9" width="12" height="32" rx="1.5" fill="#14181C"/><rect x="6" y="45" width="52" height="10" rx="1.5" fill="#14181C"/>
+        </svg>
+      </div>
+      <div class="cap"><b>One-color</b><span>Fax, stamps, engraving.</span></div>
+    </div>
+    <div class="spec">
+      <div class="stage" style="min-height:120px;background:#FAF9F6">
+        <svg viewBox="0 0 84 64" width="104" height="80">
+          <rect x="4" y="12" width="0.75" height="40" fill="#A8813C" opacity=".55"/>
+          <rect x="79" y="12" width="0.75" height="40" fill="#A8813C" opacity=".55"/>
+          <rect x="4" y="4" width="76" height="0.75" fill="#A8813C" opacity=".55"/>
+          <rect x="4" y="59" width="76" height="0.75" fill="#A8813C" opacity=".55"/>
+          <g transform="translate(16,10) scale(0.68)">
+            <rect x="6" y="9" width="12" height="32" rx="1.5" fill="#14453F"/><rect x="26" y="25" width="12" height="16" rx="1.5" fill="#14453F"/><rect x="46" y="9" width="12" height="32" rx="1.5" fill="#14453F"/><rect x="6" y="45" width="52" height="10" rx="1.5" fill="#A8813C"/>
+          </g>
+        </svg>
+      </div>
+      <div class="cap"><b>Clear space</b><span>= one bar width on all sides.</span></div>
+    </div>
+  </div>
+
+  <h3>Construction</h3>
+  <p>The mark is drawn on a 64&nbsp;unit grid. Bars are 12 units wide with 8-unit gaps. Outer bars run <code>y 9→41</code>; the center bar is exactly half their height, <code>y 25→41</code>. The base spans the full 52-unit width at <code>y 45→55</code>, separated from the bars by a 4-unit seam. Corner radius is 1.5 units, dropped entirely below 20&nbsp;px where it muddies the silhouette.</p>
+
+  <h3>Rules</h3>
+  <ul class="rules yes">
+    <li>Keep clear space equal to <b>one bar width</b> (12/64 of the mark's height) on every side.</li>
+    <li>Below <b>20&nbsp;px</b> use the square-cornered favicon variant; below <b>16&nbsp;px</b> use the mark alone, never the lockup.</li>
+    <li>On brand green or any dark ground, bars go white and the base stays brass. Never reverse the base to white.</li>
+    <li>In one-color contexts the entire mark takes a single ink. Brass is the first thing to go, not the last.</li>
+  </ul>
+  <ul class="rules no">
+    <li>Never rotate, skew, outline, or add a gradient, bevel, drop shadow, or glow.</li>
+    <li>Never change the bar proportions to fit a space — scale the whole mark instead.</li>
+    <li>Never recolor the bars to a semantic color (success green, danger red) to indicate state.</li>
+    <li>Never set the wordmark in the UI sans. The wordmark is always the serif, always tracked at <code>0.14em</code>, always uppercase.</li>
+    <li>Never place the mark on a photograph or a patterned ground.</li>
+  </ul>
+</section>
+
+<!-- ══════════ 03 COLOR ══════════ -->
+<section>
+  <p class="sec-no">03</p>
+  <h2>Color</h2>
+  <p class="sec-intro">A deep green carries authority without borrowing the navy every financial product already uses, and it stays clearly distinct from Seyburn Law's red. Brass appears sparingly — progress toward a minimum raise, certificate rules, the base of the mark — and never as a large field. Neutrals are warmed toward paper, because half of what this software produces ends up printed.</p>
+
+  <h3>Light theme — the default</h3>
+  <div class="swatches">
+    <div class="sw"><div class="chipc" style="background:#14453F"></div><div class="info"><div class="nm">Brand</div><div class="hx">#14453F</div><div class="use">Sidebar, primary buttons, active states, report rules</div></div></div>
+    <div class="sw"><div class="chipc" style="background:#1E635A"></div><div class="info"><div class="nm">Brand hover</div><div class="hx">#1E635A</div><div class="use">Hover and pressed states only</div></div></div>
+    <div class="sw"><div class="chipc" style="background:#E7EFED"></div><div class="info"><div class="nm">Brand soft</div><div class="hx">#E7EFED</div><div class="use">Selected rows, table headers in print</div></div></div>
+    <div class="sw"><div class="chipc" style="background:#A8813C"></div><div class="info"><div class="nm">Brass</div><div class="hx">#A8813C</div><div class="use">Progress fills, certificate rules, Add button — non-text only</div></div></div>
+    <div class="sw"><div class="chipc" style="background:#7A5C24"></div><div class="info"><div class="nm">Brass text</div><div class="hx">#7A5C24</div><div class="use">The accessible brass. Any brass-colored words use this.</div></div></div>
+    <div class="sw"><div class="chipc" style="background:#F7F1E4"></div><div class="info"><div class="nm">Brass soft</div><div class="hx">#F7F1E4</div><div class="use">Urgent-closing row tint, certificate ground</div></div></div>
+    <div class="sw"><div class="chipc" style="background:#F6F5F1"></div><div class="info"><div class="nm">Paper</div><div class="hx">#F6F5F1</div><div class="use">App background</div></div></div>
+    <div class="sw"><div class="chipc" style="background:#FFFFFF;border-bottom:1px solid #E5E2DA"></div><div class="info"><div class="nm">Surface</div><div class="hx">#FFFFFF</div><div class="use">Cards, panels, modals, inputs</div></div></div>
+    <div class="sw"><div class="chipc" style="background:#E5E2DA"></div><div class="info"><div class="nm">Border</div><div class="hx">#E5E2DA</div><div class="use">Hairlines, table rules</div></div></div>
+    <div class="sw"><div class="chipc" style="background:#14181C"></div><div class="info"><div class="nm">Ink</div><div class="hx">#14181C</div><div class="use">Primary text</div></div></div>
+    <div class="sw"><div class="chipc" style="background:#4A535C"></div><div class="info"><div class="nm">Ink 2</div><div class="hx">#4A535C</div><div class="use">Secondary text, descriptions</div></div></div>
+    <div class="sw"><div class="chipc" style="background:#646E78"></div><div class="info"><div class="nm">Ink 3</div><div class="hx">#646E78</div><div class="use">Labels, captions, placeholders</div></div></div>
+  </div>
+
+  <h3>Semantic — status, not decoration</h3>
+  <div class="swatches">
+    <div class="sw"><div class="chipc" style="background:#16694F"></div><div class="info"><div class="nm">Success</div><div class="hx">#16694F</div><div class="use">Funded, Closed, minimum met, positive reconciliation</div></div></div>
+    <div class="sw"><div class="chipc" style="background:#8A6410"></div><div class="info"><div class="nm">Warning</div><div class="hx">#8A6410</div><div class="use">Closing soon, sub signed but unfunded</div></div></div>
+    <div class="sw"><div class="chipc" style="background:#97302F"></div><div class="info"><div class="nm">Danger</div><div class="hx">#97302F</div><div class="use">Terminated, withdrawn, variance, destructive actions</div></div></div>
+    <div class="sw"><div class="chipc" style="background:#1F5480"></div><div class="info"><div class="nm">Info</div><div class="hx">#1F5480</div><div class="use">Filed, sub sent, links, releases</div></div></div>
+  </div>
+
+  <h3>Dark theme</h3>
+  <div class="swatches">
+    <div class="sw"><div class="chipc" style="background:#0F1416"></div><div class="info"><div class="nm">Paper</div><div class="hx">#0F1416</div><div class="use">App background</div></div></div>
+    <div class="sw"><div class="chipc" style="background:#161C1F"></div><div class="info"><div class="nm">Surface</div><div class="hx">#161C1F</div><div class="use">Cards, panels</div></div></div>
+    <div class="sw"><div class="chipc" style="background:#2A3337"></div><div class="info"><div class="nm">Border</div><div class="hx">#2A3337</div><div class="use">Hairlines</div></div></div>
+    <div class="sw"><div class="chipc" style="background:#4FA396"></div><div class="info"><div class="nm">Brand</div><div class="hx">#4FA396</div><div class="use">Links, focus rings, active nav</div></div></div>
+    <div class="sw"><div class="chipc" style="background:#C9A15C"></div><div class="info"><div class="nm">Brass</div><div class="hx">#C9A15C</div><div class="use">Progress fills, accents</div></div></div>
+    <div class="sw"><div class="chipc" style="background:#E7EBE9"></div><div class="info"><div class="nm">Ink</div><div class="hx">#E7EBE9</div><div class="use">Primary text</div></div></div>
+  </div>
+
+  <h3>Contrast — computed live in this page</h3>
+  <p style="font-size:14px;color:var(--ink-2)">Every pairing the interface actually uses, measured against WCAG 2.1. <b>AA</b> requires 4.5:1 for body text and 3:1 for large text and UI boundaries. These figures are calculated by script when this page loads, not typed by hand.</p>
+  <table class="contrast" id="ct">
+    <thead><tr><th>Pairing</th><th>Sample</th><th>Ratio</th><th>Result</th></tr></thead>
+    <tbody></tbody>
+  </table>
+</section>
+
+<!-- ══════════ 04 TYPE ══════════ -->
+<section>
+  <p class="sec-no">04</p>
+  <h2>Typography</h2>
+  <p class="sec-intro">Two voices. A serif for the things that carry authority — the wordmark, report titles, certificate names — and a neutral sans for everything operational. The app ships as a single offline file, so both are system stacks with no network dependency; the named webfonts apply only where the brand is hosted.</p>
+
+  <div class="two">
+    <div class="card">
+      <h3 style="margin-top:0">Serif — authority</h3>
+      <p style="font-family:var(--serif);font-size:30px;margin:0 0 12px;line-height:1.15">Certificate of Interest</p>
+      <p style="font-size:13.5px;color:var(--ink-2);margin:0 0 10px">Wordmark, report and certificate titles, the occasional pull quote. Never used for UI controls, labels, or table data.</p>
+      <p style="margin:0"><code>'Newsreader', 'Iowan Old Style', 'Palatino Linotype', Palatino, 'Book Antiqua', Georgia, serif</code></p>
+    </div>
+    <div class="card">
+      <h3 style="margin-top:0">Sans — operation</h3>
+      <p style="font-size:26px;font-weight:600;margin:0 0 12px;letter-spacing:-.02em">Escrow reconciliation</p>
+      <p style="font-size:13.5px;color:var(--ink-2);margin:0 0 10px">All interface text: navigation, headings, tables, forms, buttons, toasts. The workhorse.</p>
+      <p style="margin:0"><code>'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif</code></p>
+    </div>
+  </div>
+
+  <h3>Scale</h3>
+  <div>
+    <div class="tsample"><div class="meta">Wordmark<br>serif · 0.14em · uppercase</div><div class="demo" style="font-family:var(--serif);font-size:32px;letter-spacing:.14em;text-transform:uppercase;color:var(--brand)">Muniment</div></div>
+    <div class="tsample"><div class="meta">Report title<br>serif · 21px · 400</div><div class="demo" style="font-family:var(--serif);font-size:21px">Offering Summary — Fund II</div></div>
+    <div class="tsample"><div class="meta">Page title<br>sans · 26px · 600 · −0.02em</div><div class="demo" style="font-size:26px;font-weight:600;letter-spacing:-.02em">Riverbend Fund II, LLC</div></div>
+    <div class="tsample"><div class="meta">Section<br>sans · 18px · 600</div><div class="demo" style="font-size:18px;font-weight:600">Closings</div></div>
+    <div class="tsample"><div class="meta">Panel label<br>sans · 11px · 700 · 0.15em caps</div><div class="demo" style="font-size:11px;font-weight:700;letter-spacing:.15em;text-transform:uppercase;color:var(--ink-3)">Escrow activity</div></div>
+    <div class="tsample"><div class="meta">Body<br>sans · 15px · 400 · 1.5</div><div class="demo">Subscription received and countersigned; funds cleared escrow on 14 August.</div></div>
+    <div class="tsample"><div class="meta">Figure<br>sans · 26px · 700 · tabular</div><div class="demo" style="font-size:26px;font-weight:700;font-variant-numeric:tabular-nums;letter-spacing:-.02em">$4,275,000.00</div></div>
+    <div class="tsample"><div class="meta">Caption<br>sans · 12.5px · 400</div><div class="demo" style="font-size:12.5px;color:var(--ink-3)">Last reconciled 12 August 2026 · variance $0.00</div></div>
+    <div class="tsample"><div class="meta">Identifier<br>mono · 12.5px · 0.06em</div><div class="demo" style="font-family:var(--mono);font-size:12.5px;letter-spacing:.06em">CERT-2026-0147 · SUB-00382</div></div>
+  </div>
+</section>
+
+<!-- ══════════ 05 NUMBERS ══════════ -->
+<section>
+  <p class="sec-no">05</p>
+  <h2>Numbers, money, and dates</h2>
+  <p class="sec-intro">This is a ledger before it is anything else. These rules are not stylistic preferences — misaligned or ambiguous figures in an escrow report are a liability, and a date read wrong at a closing is a real problem.</p>
+  <ul class="rules">
+    <li><b>Every figure uses tabular lining numerals.</b> Set <code>font-variant-numeric: tabular-nums</code> globally so columns align on the decimal without exception.</li>
+    <li><b>Money is right-aligned, always to two decimal places</b>, even at whole dollars. <code>$50,000.00</code>, never <code>$50,000</code>. A dropped cent column is how reconciliation errors hide.</li>
+    <li><b>Negative amounts take a minus sign and the danger color</b> — <code>−$1,250.00</code>. Never parentheses alone, never color alone; the two together survive both grayscale printing and color blindness.</li>
+    <li><b>Zero is <code>$0.00</code>, not a dash or an em dash.</b> A dash means "not applicable"; zero means the balance is zero. They are different facts.</li>
+    <li><b>Dates in the interface are unambiguous:</b> <code>14 Aug 2026</code>. Never <code>08/14/26</code> anywhere a client might read it.</li>
+    <li><b>Dates in printed reports spell the month:</b> <code>14 August 2026</code>. Every report carries an "as of" date and a generation timestamp in its footer.</li>
+    <li><b>Percentages of ownership carry four decimals</b> — <code>12.5000%</code> — because they are computed from unit counts and rounding compounds across a class.</li>
+    <li><b>Identifiers are monospaced and never wrap</b> — certificate numbers, subscription IDs, wire references.</li>
+  </ul>
+</section>
+
+<!-- ══════════ 06 VOICE ══════════ -->
+<section>
+  <p class="sec-no">06</p>
+  <h2>Voice</h2>
+  <p class="sec-intro">Precise, unhurried, and never chatty. Muniment is a record-keeper, and a record-keeper does not celebrate. It states what happened, what is true now, and what is required next.</p>
+
+  <div class="dd" style="margin-bottom:26px">
+    <div class="box good">
+      <div class="hdr">Do</div>
+      <div class="inner">
+        <p class="q">"Escrow balance $4,275,000.00. Minimum raise met 12 Aug 2026."</p>
+        <p>State the fact and the date. Let the number carry the weight.</p>
+      </div>
+    </div>
+    <div class="box bad">
+      <div class="hdr">Don't</div>
+      <div class="inner">
+        <p class="q">"Great news — you've hit your minimum raise! 🎉"</p>
+        <p>No exclamation points, no emoji, no congratulation. A closing is a legal event, not an achievement unlocked.</p>
+      </div>
+    </div>
+  </div>
+
+  <h3>Applied to strings already in the app</h3>
+  <table class="voice-tbl">
+    <thead><tr><th>Currently</th><th>Rewrite as</th></tr></thead>
+    <tbody>
+      <tr><td class="was">Welcome to CapitalVault</td><td class="now">Muniment — no offerings on record</td></tr>
+      <tr><td class="was">＋ Add</td><td class="now">New record</td></tr>
+      <tr><td class="was">Deposit (investor → escrow)</td><td class="now">Deposit — investor to escrow</td></tr>
+      <tr><td class="was">Confirm escrow minimum (min-raise) met</td><td class="now">Confirm minimum raise satisfied</td></tr>
+      <tr><td class="was">This summary is generated by CapitalVault for internal practice-management purposes only.</td><td class="now">Generated by Muniment for internal practice-management purposes. Not an offering document and not a substitute for the executed instruments.</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Rules</h3>
+  <ul class="rules">
+    <li><b>Never an exclamation point.</b> Not in a toast, not in an empty state, not anywhere.</li>
+    <li><b>No emoji in the product.</b> The padlock in the current title bar goes; icons are drawn, not typed.</li>
+    <li><b>Empty states describe the condition, then offer the action</b> — "No closings recorded. Record a closing." Not "Nothing here yet!"</li>
+    <li><b>Destructive confirmations name the object and the consequence</b> — "Delete closing 12 Aug 2026? This reverses 14 escrow entries and voids 9 certificates."</li>
+    <li><b>Errors say what failed and what to do</b>, never "Oops" or "Something went wrong."</li>
+    <li><b>Use the profession's words</b>: subscription, allotment, escrow, closing, certificate, exemption. Never "deal," "raise" as a noun in client-facing text, or "signup."</li>
+  </ul>
+</section>
+
+<!-- ══════════ 07 APPLICATIONS ══════════ -->
+<section>
+  <p class="sec-no">07</p>
+  <h2>Applications</h2>
+  <p class="sec-intro">Three places the brand has to hold: the interface staff live in all day, the reports that leave the building, and the certificates that evidence an interest.</p>
+
+  <h3>Interface</h3>
+  <div class="app-frame" style="margin-bottom:22px">
+    <div class="mini-app">
+      <div class="mini-side">
+        <div class="b">
+          <svg viewBox="0 0 64 64" width="20" height="20">
+            <rect x="6" y="9" width="12" height="32" rx="1.5" fill="#fff"/><rect x="26" y="25" width="12" height="16" rx="1.5" fill="#fff"/><rect x="46" y="9" width="12" height="32" rx="1.5" fill="#fff"/><rect x="6" y="45" width="52" height="10" rx="1.5" fill="#C9A15C"/>
+          </svg>
+          <span class="wm">Muniment</span>
+        </div>
+        <div class="add">New record</div>
+        <div class="n on">Dashboard</div>
+        <div class="n">Offerings</div>
+        <div class="n">Investors</div>
+      </div>
+      <div class="mini-main">
+        <div class="t">Riverbend Fund II, LLC</div>
+        <div class="s">Reg D 506(b) · LLC Units · Open</div>
+        <div class="mini-stats">
+          <div class="mini-stat"><div class="l">In escrow</div><div class="v">$4,275,000</div></div>
+          <div class="mini-stat acc"><div class="l">Toward minimum</div><div class="v">64%</div></div>
+          <div class="mini-stat"><div class="l">Subscribers</div><div class="v">27</div></div>
+        </div>
+        <div class="mini-bar"><i></i></div>
+      </div>
+    </div>
+  </div>
+
+  <h3>Printed report</h3>
+  <div class="app-frame" style="margin-bottom:22px">
+    <div class="letterhead">
+      <div class="lh-head">
+        <div class="l">
+          <svg viewBox="0 0 64 64" width="30" height="30">
+            <rect x="6" y="9" width="12" height="32" rx="1.5" fill="#14453F"/><rect x="26" y="25" width="12" height="16" rx="1.5" fill="#14453F"/><rect x="46" y="9" width="12" height="32" rx="1.5" fill="#14453F"/><rect x="6" y="45" width="52" height="10" rx="1.5" fill="#A8813C"/>
+          </svg>
+          <span class="wm">Muniment</span>
+        </div>
+        <div class="r"><strong>Prepared 18 August 2026</strong><br>As of 15 August 2026<br>Page 1 of 4</div>
+      </div>
+      <p class="lh-title">Offering Summary — Riverbend Fund II, LLC</p>
+      <p class="lh-sub">Regulation D, Rule 506(b) · LLC Units · Escrow held at First Michigan Trust</p>
+      <table class="lh-tbl">
+        <thead><tr><th>Subscriber</th><th>Class</th><th class="n">Units</th><th class="n">Amount</th><th>Status</th></tr></thead>
+        <tbody>
+          <tr><td>Aldridge Family Trust</td><td>Class A</td><td class="n">250.0000</td><td class="n">250,000.00</td><td>Funded</td></tr>
+          <tr><td>Barrow, Helen M.</td><td>Class A</td><td class="n">100.0000</td><td class="n">100,000.00</td><td>Funded</td></tr>
+          <tr><td>Coventry Holdings LLC</td><td>Class B</td><td class="n">500.0000</td><td class="n">500,000.00</td><td>Sub signed</td></tr>
+        </tbody>
+      </table>
+      <p class="lh-foot">Generated by Muniment for internal practice-management purposes. Not an offering document and not a substitute for the executed instruments. Figures are unaudited and reflect records entered as of the date stated above.</p>
+    </div>
+  </div>
+
+  <h3>Certificate</h3>
+  <div class="app-frame">
+    <div class="cert">
+      <div class="ck">Certificate of Interest</div>
+      <div class="cn">Aldridge Family Trust</div>
+      <div class="cs">250.0000 Class A Units &nbsp;·&nbsp; 12.5000% of class &nbsp;·&nbsp; 6.2500% of total</div>
+      <div class="cnum">CERT-2026-0147 &nbsp;·&nbsp; Issued 12 August 2026</div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════ 08 HANDOFF ══════════ -->
+<section style="border-bottom:0">
+  <p class="sec-no">08</p>
+  <h2>What comes next</h2>
+  <p class="sec-intro">Stage 3 applies all of this to the working application — the file you sent, rebuilt with this system, plus a dark theme. Stage 4 is the implementation kit: every value on this page as CSS custom properties and a JSON token file, so nothing here has to be retyped or guessed at later.</p>
+  <div class="card">
+    <ul class="rules" style="margin:0">
+      <li><b>muniment.css</b> — the full token layer plus component styles, drop-in for a plain HTML/CSS/JS codebase.</li>
+      <li><b>muniment-tokens.json</b> — the same values in a framework-neutral format, for whatever the app becomes later.</li>
+      <li><b>muniment-mark.svg</b> — the mark in all four color treatments, plus the favicon data-URI.</li>
+      <li><b>Rebrand notes</b> — every string and value changed in the app, so nothing is discovered by surprise.</li>
+    </ul>
+  </div>
+</section>
+
+<footer>
+  <span>Muniment · Brand guide v1.0 · Stage 2 of 4</span>
+  <span>Prepared for Rob Angevine · Seyburn Law PLLC · 18 August 2026</span>
+</footer>
+
+</div>
+
+<script>
+/* Live WCAG contrast calculation — figures in the table are computed, not asserted. */
+function lum(hex){
+  const v=[1,3,5].map(i=>parseInt(hex.substr(i,2),16)/255)
+    .map(c=>c<=0.03928?c/12.92:Math.pow((c+0.055)/1.055,2.4));
+  return 0.2126*v[0]+0.7152*v[1]+0.0722*v[2];
+}
+function ratio(a,b){const l1=lum(a),l2=lum(b);const hi=Math.max(l1,l2),lo=Math.min(l1,l2);return (hi+0.05)/(lo+0.05);}
+
+const PAIRS=[
+  ['Ink on paper','#14181C','#F6F5F1','body',4.5],
+  ['Ink 2 on surface','#4A535C','#FFFFFF','secondary text',4.5],
+  ['Ink 3 on surface','#646E78','#FFFFFF','labels & captions',4.5],
+  ['Brand on surface','#14453F','#FFFFFF','links, headings',4.5],
+  ['White on brand','#FFFFFF','#14453F','sidebar & primary button',4.5],
+  ['Brass text on surface','#7A5C24','#FFFFFF','accent text',4.5],
+  ['Brass on surface','#A8813C','#FFFFFF','non-text UI only',3],
+  ['Success on its tint','#16694F','#E6F2ED','status pill',4.5],
+  ['Warning on its tint','#8A6410','#F8F0DE','status pill',4.5],
+  ['Danger on its tint','#97302F','#F9E9E8','status pill',4.5],
+  ['Info on its tint','#1F5480','#E7EFF7','status pill',4.5],
+  ['Dark: ink on paper','#E7EBE9','#0F1416','body',4.5],
+  ['Dark: ink 2 on surface','#A8B3B1','#161C1F','secondary text',4.5],
+  ['Dark: ink 3 on surface','#869390','#161C1F','labels & captions',4.5],
+  ['Dark: brand on surface','#4FA396','#161C1F','links, active nav',4.5],
+  ['Dark: brass on surface','#C9A15C','#161C1F','accent text',4.5]
+];
+
+const tb=document.querySelector('#ct tbody');
+PAIRS.forEach(([name,fg,bg,use,need])=>{
+  const r=ratio(fg,bg);
+  const ok=r>=need;
+  const tr=document.createElement('tr');
+  tr.innerHTML=
+    '<td><b style="font-weight:600">'+name+'</b><div style="font-size:11.5px;color:var(--ink-3);margin-top:2px">'+use+' · needs '+need+':1</div></td>'+
+    '<td><span class="sample" style="color:'+fg+';background:'+bg+'">$4,275,000.00</span></td>'+
+    '<td>'+r.toFixed(2)+':1</td>'+
+    '<td class="'+(ok?'pass':'fail')+'">'+(ok?(r>=7?'AAA':'AA'):'FAIL')+'</td>';
+  tb.appendChild(tr);
+});
+</script>
+</body>
+</html>

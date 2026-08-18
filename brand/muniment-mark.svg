@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 88" role="img" aria-label="Muniment mark — colour treatments">
+  <title>Muniment mark</title>
+  <desc>Four treatments on a 64-unit grid. Bars 12 wide, 8 apart. Outer bars y 9-41, centre bar exactly half height y 25-41, base y 45-55.</desc>
+
+  <!-- 1. Primary: brand bars, brass base -->
+  <g id="primary" transform="translate(12 12)">
+    <rect x="6" y="9" width="12" height="32" rx="1.5" fill="#14453F"/>
+    <rect x="26" y="25" width="12" height="16" rx="1.5" fill="#14453F"/>
+    <rect x="46" y="9" width="12" height="32" rx="1.5" fill="#14453F"/>
+    <rect x="6" y="45" width="52" height="10" rx="1.5" fill="#A8813C"/>
+  </g>
+
+  <!-- 2. Reversed: white bars, brass base. For brand green or any dark ground. -->
+  <g id="reverse" transform="translate(92 12)">
+    <rect x="0" y="0" width="64" height="64" fill="#14453F"/>
+    <rect x="6" y="9" width="12" height="32" rx="1.5" fill="#FFFFFF"/>
+    <rect x="26" y="25" width="12" height="16" rx="1.5" fill="#FFFFFF"/>
+    <rect x="46" y="9" width="12" height="32" rx="1.5" fill="#FFFFFF"/>
+    <rect x="6" y="45" width="52" height="10" rx="1.5" fill="#C9A15C"/>
+  </g>
+
+  <!-- 3. Dark theme: lightened brand + brass -->
+  <g id="dark" transform="translate(172 12)">
+    <rect x="0" y="0" width="64" height="64" fill="#0F1416"/>
+    <rect x="6" y="9" width="12" height="32" rx="1.5" fill="#4FA396"/>
+    <rect x="26" y="25" width="12" height="16" rx="1.5" fill="#4FA396"/>
+    <rect x="46" y="9" width="12" height="32" rx="1.5" fill="#4FA396"/>
+    <rect x="6" y="45" width="52" height="10" rx="1.5" fill="#C9A15C"/>
+  </g>
+
+  <!-- 4. One colour: fax, stamps, engraving. Brass is the first thing to go. -->
+  <g id="mono" transform="translate(252 12)">
+    <rect x="6" y="9" width="12" height="32" rx="1.5" fill="#14181C"/>
+    <rect x="26" y="25" width="12" height="16" rx="1.5" fill="#14181C"/>
+    <rect x="46" y="9" width="12" height="32" rx="1.5" fill="#14181C"/>
+    <rect x="6" y="45" width="52" height="10" rx="1.5" fill="#14181C"/>
+  </g>
+</svg>

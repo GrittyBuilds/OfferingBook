@@ -13,11 +13,11 @@ router.get('/', async (req, res) => {
   const backupsDir = join(__dirname, '..', '..', 'backups');
   mkdirSync(backupsDir, { recursive: true });
   const stamp = new Date().toISOString().replace(/[:.]/g, '-');
-  const outPath = join(backupsDir, `capitalvault-backup-${stamp}.db`);
+  const outPath = join(backupsDir, `muniment-backup-${stamp}.db`);
 
   try {
     await db.backup(outPath);
-    res.download(outPath, `capitalvault-backup-${stamp}.db`, (err) => {
+    res.download(outPath, `muniment-backup-${stamp}.db`, (err) => {
       // Clean up the temp snapshot once the download finishes.
       if (existsSync(outPath)) {
         try { unlinkSync(outPath); } catch { /* ignore */ }

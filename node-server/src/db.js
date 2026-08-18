@@ -1,16 +1,33 @@
 import Database from 'better-sqlite3';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, existsSync } from 'node:fs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-// The database lives in ./data/capitalvault.db at the project root.
-// Backing up the whole app is as simple as copying that one file.
+// The database lives in ./data/muniment.db at the project root. Backing up the
+// whole app is as simple as copying that one file.
 const dataDir = join(__dirname, '..', 'data');
 mkdirSync(dataDir, { recursive: true });
 
-export const DB_PATH = process.env.CAPITALVAULT_DB || join(dataDir, 'capitalvault.db');
+// Databases written under the earlier names, newest first. A database created
+// before the rename keeps being used rather than being silently abandoned for
+// an empty muniment.db, so nothing is lost in the rebrand.
+const LEGACY_DB_NAMES = ['capitalvault.db', 'offeringbook.db'];
+
+function resolveDbPath() {
+  const configured = process.env.MUNIMENT_DB || process.env.CAPITALVAULT_DB;
+  if (configured) return configured;
+  const current = join(dataDir, 'muniment.db');
+  if (existsSync(current)) return current;
+  for (const name of LEGACY_DB_NAMES) {
+    const legacy = join(dataDir, name);
+    if (existsSync(legacy)) return legacy;
+  }
+  return current;
+}
+
+export const DB_PATH = resolveDbPath();
 
 const db = new Database(DB_PATH);
 db.pragma('journal_mode = WAL');

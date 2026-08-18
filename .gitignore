@@ -12,3 +12,6 @@ backups/
 Thumbs.db
 *.log
 .env
+
+# Smoke-test screenshots
+.smoke-shots/
