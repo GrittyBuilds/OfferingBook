@@ -1,0 +1,191 @@
+{
+  "$schema": "https://design-tokens.org/schema.json",
+  "name": "Muniment",
+  "version": "1.0.0",
+  "date": "2026-08-18",
+  "description": "Design tokens for Muniment — the system of record for private offerings. Framework-neutral. Every colour pairing listed in `contrast` was measured against WCAG 2.1.",
+
+  "brand": {
+    "name": "Muniment",
+    "pronunciation": "MYOO-nih-ment",
+    "definition": "A document held as evidence of title. From Latin munire, to fortify.",
+    "tagline": "The system of record for private offerings.",
+    "taglineShort": "Proof of title, in order.",
+    "slug": "muniment",
+    "storageKeys": {
+      "data": "muniment:data",
+      "theme": "muniment:theme",
+      "migrateFrom": ["capitalvault:data", "offeringbook:data"]
+    }
+  },
+
+  "font": {
+    "sans":  "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif",
+    "serif": "'Newsreader', 'Iowan Old Style', 'Palatino Linotype', Palatino, 'Book Antiqua', Georgia, serif",
+    "mono":  "ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace",
+    "note":  "The app ships offline as a single file, so these are system stacks. The named webfonts apply only where the brand is web-hosted."
+  },
+
+  "size": {
+    "xs": "11px", "sm": "12.5px", "base": "15px", "lg": "18px", "xl": "26px"
+  },
+  "tracking": {
+    "label": "0.14em", "wordmark": "0.14em", "tight": "-0.02em"
+  },
+  "radius": { "base": "8px", "sm": "6px", "pill": "20px" },
+  "space":  { "1": "4px", "2": "8px", "3": "12px", "4": "16px", "5": "22px", "6": "30px", "7": "44px" },
+
+  "color": {
+    "light": {
+      "bg": "#F6F5F1",
+      "surface": "#FFFFFF",
+      "surface-2": "#FAF9F6",
+      "border": "#E5E2DA",
+      "border-strong": "#D4D0C5",
+
+      "text": "#14181C",
+      "text-soft": "#4A535C",
+      "muted": "#646E78",
+
+      "brand": "#14453F",
+      "brand-2": "#1E635A",
+      "brand-soft": "#E7EFED",
+      "brand-line": "#C9D8D4",
+      "brand-ring": "rgba(20,69,63,.14)",
+
+      "sidebar": "#14453F",
+      "sidebar-text": "#CFE0DC",
+      "sidebar-dim": "#A9C4BE",
+      "sidebar-line": "rgba(255,255,255,.10)",
+
+      "brass": "#A8813C",
+      "brass-2": "#BE9450",
+      "brass-text": "#7A5C24",
+      "brass-soft": "#F7F1E4",
+      "brass-line": "#E8DCC0",
+      "on-brass": "#221803",
+
+      "green": "#16694F", "green-bg": "#E6F2ED",
+      "amber": "#8A6410", "amber-bg": "#F8F0DE",
+      "red": "#97302F", "red-2": "#7E2524", "red-bg": "#F9E9E8", "red-line": "#E4C6C5",
+      "blue": "#1F5480", "blue-bg": "#E7EFF7",
+
+      "scrim": "rgba(12,20,18,.52)",
+      "shadow": "0 1px 2px rgba(20,30,26,.05), 0 3px 10px rgba(20,30,26,.045)",
+      "shadow-lg": "0 12px 40px rgba(12,20,18,.20)"
+    },
+    "dark": {
+      "bg": "#0F1416",
+      "surface": "#161C1F",
+      "surface-2": "#1D2427",
+      "border": "#2A3337",
+      "border-strong": "#3A4549",
+
+      "text": "#E7EBE9",
+      "text-soft": "#A8B3B1",
+      "muted": "#869390",
+
+      "brand": "#4FA396",
+      "brand-2": "#6BBDB0",
+      "brand-soft": "#16302C",
+      "brand-line": "#284944",
+      "brand-ring": "rgba(79,163,150,.22)",
+      "brand-solid": "#1E635A",
+
+      "sidebar": "#0B1113",
+      "sidebar-text": "#C2D2CE",
+      "sidebar-dim": "#8CA39E",
+      "sidebar-line": "rgba(255,255,255,.09)",
+
+      "brass": "#C9A15C",
+      "brass-2": "#D9B978",
+      "brass-text": "#D9B978",
+      "brass-soft": "#2B2312",
+      "brass-line": "#4A3C1D",
+      "on-brass": "#1A1204",
+
+      "green": "#4FB48D", "green-bg": "#122A22",
+      "amber": "#D2A544", "amber-bg": "#2B2312",
+      "red": "#E08585", "red-2": "#EFA3A3", "red-bg": "#2C1817", "red-line": "#4E2C2B",
+      "blue": "#6FA8DA", "blue-bg": "#132433",
+
+      "scrim": "rgba(0,0,0,.66)",
+      "shadow": "0 1px 2px rgba(0,0,0,.35), 0 3px 12px rgba(0,0,0,.30)",
+      "shadow-lg": "0 14px 44px rgba(0,0,0,.60)"
+    }
+  },
+
+  "semantics": {
+    "green": "Funded · Closed · minimum raise met · positive reconciliation",
+    "amber": "Closing soon · subscription signed but unfunded · pending clearance",
+    "red": "Terminated · Withdrawn · reconciliation variance · destructive actions",
+    "blue": "Filed · subscription sent · links · escrow releases",
+    "brass": "Progress toward a minimum raise · certificate rules · the primary Add action. Never a status."
+  },
+
+  "contrast": {
+    "standard": "WCAG 2.1 — 4.5:1 for body text, 3:1 for large text and UI boundaries.",
+    "measured": [
+      { "pair": "text on bg (light)",            "ratio": 16.35, "requires": 4.5, "result": "AAA" },
+      { "pair": "text-soft on surface (light)",  "ratio": 7.83,  "requires": 4.5, "result": "AAA" },
+      { "pair": "muted on surface (light)",      "ratio": 5.19,  "requires": 4.5, "result": "AA"  },
+      { "pair": "muted on bg (light)",           "ratio": 4.76,  "requires": 4.5, "result": "AA"  },
+      { "pair": "brand on surface (light)",      "ratio": 10.75, "requires": 4.5, "result": "AAA" },
+      { "pair": "white on brand (light)",        "ratio": 10.75, "requires": 4.5, "result": "AAA" },
+      { "pair": "brass-text on surface (light)", "ratio": 6.21,  "requires": 4.5, "result": "AA"  },
+      { "pair": "brass on surface (light)",      "ratio": 3.58,  "requires": 3.0, "result": "AA (non-text only)" },
+      { "pair": "on-brass on brass (light)",     "ratio": 4.89,  "requires": 4.5, "result": "AA"  },
+      { "pair": "sidebar-text on sidebar",       "ratio": 7.86,  "requires": 4.5, "result": "AAA" },
+      { "pair": "sidebar-dim on sidebar",        "ratio": 5.80,  "requires": 4.5, "result": "AA"  },
+      { "pair": "green on green-bg (light)",     "ratio": 5.77,  "requires": 4.5, "result": "AA"  },
+      { "pair": "amber on amber-bg (light)",     "ratio": 4.73,  "requires": 4.5, "result": "AA"  },
+      { "pair": "red on red-bg (light)",         "ratio": 6.42,  "requires": 4.5, "result": "AA"  },
+      { "pair": "blue on blue-bg (light)",       "ratio": 6.86,  "requires": 4.5, "result": "AA"  },
+      { "pair": "text on bg (dark)",             "ratio": 15.42, "requires": 4.5, "result": "AAA" },
+      { "pair": "text-soft on surface (dark)",   "ratio": 7.99,  "requires": 4.5, "result": "AAA" },
+      { "pair": "muted on surface-2 (dark)",     "ratio": 4.94,  "requires": 4.5, "result": "AA"  },
+      { "pair": "brand on surface (dark)",       "ratio": 5.75,  "requires": 4.5, "result": "AA"  },
+      { "pair": "brass on surface (dark)",       "ratio": 7.16,  "requires": 4.5, "result": "AAA" },
+      { "pair": "green on green-bg (dark)",      "ratio": 5.98,  "requires": 4.5, "result": "AA"  },
+      { "pair": "amber on amber-bg (dark)",      "ratio": 6.81,  "requires": 4.5, "result": "AA"  },
+      { "pair": "red on red-bg (dark)",          "ratio": 6.29,  "requires": 4.5, "result": "AA"  },
+      { "pair": "blue on blue-bg (dark)",        "ratio": 6.24,  "requires": 4.5, "result": "AA"  }
+    ]
+  },
+
+  "logo": {
+    "grid": 64,
+    "barWidth": 12,
+    "gap": 8,
+    "outerBars": { "y": 9, "height": 32 },
+    "centreBar": { "y": 25, "height": 16 },
+    "base": { "x": 6, "y": 45, "width": 52, "height": 10 },
+    "cornerRadius": 1.5,
+    "cornerRadiusDropsBelow": "20px",
+    "clearSpace": "one bar width (12/64 of mark height) on every side",
+    "minLockupWidth": "132px",
+    "minMarkSize": "16px"
+  },
+
+  "numberRules": {
+    "figures": "tabular lining numerals everywhere — font-variant-numeric: tabular-nums",
+    "money": "right-aligned, always two decimal places, even at whole dollars",
+    "negative": "U+2212 MINUS SIGN plus the danger colour — never parentheses alone, never colour alone",
+    "zero": "$0.00, never a dash. A dash means not applicable; zero means the balance is zero.",
+    "dateUI": "14 Aug 2026 — never 08/14/26",
+    "datePrint": "14 August 2026, with an as-of date and generation timestamp in every report footer",
+    "ownershipPercent": "four decimal places minimum; rounding compounds across a class",
+    "identifiers": "monospace, never wrapping"
+  },
+
+  "voice": {
+    "rules": [
+      "Never an exclamation point.",
+      "No emoji in the product — icons are drawn, not typed.",
+      "Empty states describe the condition, then offer the action.",
+      "Destructive confirmations name the object and the consequence.",
+      "Errors say what failed and what to do. Never 'Oops' or 'Something went wrong.'",
+      "Use the profession's words: subscription, allotment, escrow, closing, certificate, exemption."
+    ]
+  }
+}

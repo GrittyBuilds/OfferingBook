@@ -1,0 +1,323 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   MUNIMENT — design tokens and base components
+   v1.0 · August 2026 · Seyburn Law PLLC
+
+   Drop-in for a plain HTML/CSS/JS codebase. Link it before any page CSS:
+
+       <link rel="stylesheet" href="muniment.css">
+
+   Light is the default. Dark is opt-in and must be set on <html>:
+
+       <html data-theme="dark">
+
+   To avoid a flash of the wrong theme on load, set the attribute before the
+   first paint — put this in <head>, above the stylesheet link:
+
+       <script>try{var t=localStorage.getItem('muniment:theme');
+       document.documentElement.setAttribute('data-theme',t==='dark'?'dark':'light');}
+       catch(e){document.documentElement.setAttribute('data-theme','light');}</script>
+
+   Every colour pairing below was measured against WCAG 2.1 AA. Body-text
+   pairings clear 4.5:1; non-text UI pairings clear 3:1. If you change a value,
+   re-measure it — the ratios are not decorative.
+   ═════════════════════════════════════════════════════════════════════════ */
+
+/* ── TOKENS ─────────────────────────────────────────────────────────────── */
+:root{
+  /* Type. The app ships as a single offline file, so these are system stacks.
+     'Inter' and 'Newsreader' apply only where the brand is web-hosted. */
+  --font-sans:'Inter',-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  --font-serif:'Newsreader','Iowan Old Style','Palatino Linotype',Palatino,"Book Antiqua",Georgia,serif;
+  --font-mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
+
+  /* Scale */
+  --text-xs:11px;    /* labels, captions */
+  --text-sm:12.5px;  /* secondary, table meta */
+  --text-base:15px;  /* body */
+  --text-lg:18px;    /* section headings */
+  --text-xl:26px;    /* page titles, figures */
+
+  --track-label:.14em;  /* uppercase micro-labels */
+  --track-wordmark:.14em;
+  --track-tight:-.02em; /* page titles and large figures */
+
+  /* Geometry */
+  --radius:8px;
+  --radius-sm:6px;
+  --radius-pill:20px;
+
+  /* Space — 4px base */
+  --sp-1:4px; --sp-2:8px; --sp-3:12px; --sp-4:16px;
+  --sp-5:22px; --sp-6:30px; --sp-7:44px;
+
+  /* ── Light theme ── */
+  --bg:#F6F5F1;              /* app ground — warmed toward paper */
+  --surface:#FFFFFF;         /* cards, panels, modals, inputs */
+  --surface-2:#FAF9F6;       /* hover rows, insets */
+  --border:#E5E2DA;          /* hairlines */
+  --border-strong:#D4D0C5;   /* input outlines, table head rules */
+
+  --text:#14181C;            /* primary        — 16.35:1 on --bg */
+  --text-soft:#4A535C;       /* secondary      —  7.83:1 on --surface */
+  --muted:#646E78;           /* labels, hints  —  5.19:1 on --surface */
+
+  --brand:#14453F;           /* headings, links, active — 10.75:1 on white */
+  --brand-2:#1E635A;         /* hover, pressed */
+  --brand-soft:#E7EFED;      /* selected rows, print table heads */
+  --brand-line:#C9D8D4;
+  --brand-ring:rgba(20,69,63,.14);   /* focus halo */
+
+  --sidebar:#14453F;
+  --sidebar-text:#CFE0DC;    /* 7.86:1 on --sidebar */
+  --sidebar-dim:#A9C4BE;     /* 5.80:1 on --sidebar */
+  --sidebar-line:rgba(255,255,255,.10);
+
+  --brass:#A8813C;           /* NON-TEXT ONLY — 3.58:1 on white */
+  --brass-2:#BE9450;
+  --brass-text:#7A5C24;      /* the accessible brass — 6.21:1 on white */
+  --brass-soft:#F7F1E4;
+  --brass-line:#E8DCC0;
+  --on-brass:#221803;        /* text on a brass fill — 4.89:1 */
+
+  --green:#16694F;   --green-bg:#E6F2ED;   /* funded, closed, minimum met */
+  --amber:#8A6410;   --amber-bg:#F8F0DE;   /* closing soon, signed unfunded */
+  --red:#97302F;     --red-2:#7E2524;      /* terminated, variance, destructive */
+  --red-bg:#F9E9E8;  --red-line:#E4C6C5;
+  --blue:#1F5480;    --blue-bg:#E7EFF7;    /* filed, sub sent, links */
+
+  --scrim:rgba(12,20,18,.52);
+  --shadow:0 1px 2px rgba(20,30,26,.05),0 3px 10px rgba(20,30,26,.045);
+  --shadow-lg:0 12px 40px rgba(12,20,18,.20);
+
+  color-scheme:light;
+}
+
+html[data-theme="dark"]{
+  --bg:#0F1416;
+  --surface:#161C1F;
+  --surface-2:#1D2427;
+  --border:#2A3337;
+  --border-strong:#3A4549;
+
+  --text:#E7EBE9;            /* 15.42:1 on --bg */
+  --text-soft:#A8B3B1;       /*  7.99:1 on --surface */
+  --muted:#869390;           /*  4.94:1 on --surface-2 */
+
+  --brand:#4FA396;           /*  5.75:1 on --surface */
+  --brand-2:#6BBDB0;
+  --brand-soft:#16302C;
+  --brand-line:#284944;
+  --brand-ring:rgba(79,163,150,.22);
+
+  --sidebar:#0B1113;
+  --sidebar-text:#C2D2CE;
+  --sidebar-dim:#8CA39E;
+  --sidebar-line:rgba(255,255,255,.09);
+
+  --brass:#C9A15C;           /* on dark, brass IS legible as text — 7.16:1 */
+  --brass-2:#D9B978;
+  --brass-text:#D9B978;
+  --brass-soft:#2B2312;
+  --brass-line:#4A3C1D;
+  --on-brass:#1A1204;
+
+  --green:#4FB48D;   --green-bg:#122A22;
+  --amber:#D2A544;   --amber-bg:#2B2312;
+  --red:#E08585;     --red-2:#EFA3A3;
+  --red-bg:#2C1817;  --red-line:#4E2C2B;
+  --blue:#6FA8DA;    --blue-bg:#132433;
+
+  --scrim:rgba(0,0,0,.66);
+  --shadow:0 1px 2px rgba(0,0,0,.35),0 3px 12px rgba(0,0,0,.30);
+  --shadow-lg:0 14px 44px rgba(0,0,0,.60);
+
+  color-scheme:dark;
+}
+
+/* ── BASE ───────────────────────────────────────────────────────────────── */
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg)}
+body{
+  color:var(--text);
+  font-family:var(--font-sans);
+  font-size:var(--text-base);
+  line-height:1.5;
+  /* Non-negotiable in a ledger: columns must align on the decimal. */
+  font-variant-numeric:tabular-nums;
+  -webkit-font-smoothing:antialiased;
+}
+a{color:var(--brand);text-decoration:none}
+a:hover{text-decoration:underline}
+::selection{background:var(--brand-soft);color:var(--brand)}
+:focus-visible{outline:2px solid var(--brand);outline-offset:2px}
+@media(prefers-reduced-motion:reduce){
+  *{animation-duration:.01ms!important;transition-duration:.01ms!important}
+}
+
+/* ── IDENTITY ───────────────────────────────────────────────────────────── */
+.mn-lockup{display:flex;align-items:center;gap:11px}
+.mn-mark{width:24px;height:24px;flex-shrink:0;fill:var(--brand)}
+.mn-mark .base{fill:var(--brass)}
+.mn-lockup--reverse .mn-mark{fill:#fff}
+.mn-lockup--reverse .mn-mark .base{fill:var(--brass-2)}
+.mn-wordmark{
+  font-family:var(--font-serif);
+  font-size:19px;font-weight:400;line-height:1;
+  letter-spacing:var(--track-wordmark);
+  text-transform:uppercase;
+  color:var(--brand);
+}
+.mn-lockup--reverse .mn-wordmark{color:#fff}
+
+/* ── TYPE ───────────────────────────────────────────────────────────────── */
+.mn-title{font-size:var(--text-xl);font-weight:600;letter-spacing:var(--track-tight);margin:0}
+.mn-section{font-size:var(--text-lg);font-weight:600;margin:0}
+.mn-label{
+  font-size:var(--text-xs);font-weight:700;
+  letter-spacing:var(--track-label);text-transform:uppercase;
+  color:var(--muted);
+}
+.mn-caption{font-size:var(--text-sm);color:var(--muted)}
+.mn-serif{font-family:var(--font-serif);font-weight:400}
+.mn-id{font-family:var(--font-mono);font-size:var(--text-sm);letter-spacing:.06em;white-space:nowrap}
+
+/* Figures. Use .mn-figure for any currency or unit count. */
+.mn-figure{font-variant-numeric:tabular-nums;letter-spacing:var(--track-tight);text-align:right}
+.mn-figure--pos{color:var(--green);font-weight:600}
+.mn-figure--neg{color:var(--red);font-weight:600}   /* pair with U+2212, not a hyphen */
+
+/* ── SURFACES ───────────────────────────────────────────────────────────── */
+.mn-panel{
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-radius:var(--radius);
+  padding:var(--sp-5);
+  box-shadow:var(--shadow);
+}
+.mn-stat{
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--radius);padding:var(--sp-4) var(--sp-5);box-shadow:var(--shadow);
+}
+.mn-stat__label{font-size:10.5px;font-weight:700;letter-spacing:var(--track-label);
+  text-transform:uppercase;color:var(--muted)}
+.mn-stat__value{font-size:var(--text-xl);font-weight:700;margin-top:6px;
+  letter-spacing:var(--track-tight);font-variant-numeric:tabular-nums}
+.mn-stat--accent .mn-stat__value{color:var(--brass-text)}
+.mn-stat--success .mn-stat__value{color:var(--green)}
+
+/* ── BUTTONS ────────────────────────────────────────────────────────────── */
+.mn-btn{
+  display:inline-flex;align-items:center;gap:7px;
+  border:1px solid transparent;border-radius:var(--radius-sm);
+  padding:9px 16px;font:600 14px/1.2 var(--font-sans);letter-spacing:.01em;
+  cursor:pointer;white-space:nowrap;transition:background .12s,border-color .12s;
+}
+.mn-btn--primary{background:var(--brand);color:#fff}
+.mn-btn--primary:hover{background:var(--brand-2)}
+.mn-btn--ghost{background:var(--surface);color:var(--text);border-color:var(--border-strong)}
+.mn-btn--ghost:hover{background:var(--surface-2)}
+.mn-btn--brass{background:var(--brass);color:var(--on-brass);font-weight:700}
+.mn-btn--brass:hover{background:var(--brass-2)}
+.mn-btn--danger{background:var(--red);color:#fff}
+.mn-btn--danger:hover{background:var(--red-2)}
+.mn-btn:disabled{opacity:.55;cursor:default}
+/* In dark mode a solid brand button needs a lighter fill than brand text. */
+html[data-theme="dark"] .mn-btn--primary{background:#1E635A}
+html[data-theme="dark"] .mn-btn--primary:hover{background:#26766B}
+
+/* ── PILLS — status, never decoration ───────────────────────────────────── */
+.mn-pill{
+  display:inline-block;padding:3px 10px;border-radius:var(--radius-pill);
+  font-size:11.5px;font-weight:600;letter-spacing:.02em;white-space:nowrap;
+}
+.mn-pill--default{background:var(--surface-2);color:var(--text-soft);border:1px solid var(--border)}
+.mn-pill--muted  {background:var(--surface-2);color:var(--muted);border:1px solid var(--border)}
+.mn-pill--success{background:var(--green-bg);color:var(--green)}
+.mn-pill--warn   {background:var(--amber-bg);color:var(--amber)}
+.mn-pill--danger {background:var(--red-bg);color:var(--red)}
+.mn-pill--info   {background:var(--blue-bg);color:var(--blue)}
+
+/* ── FORMS ──────────────────────────────────────────────────────────────── */
+.mn-input,.mn-select,.mn-textarea{
+  width:100%;padding:9px 11px;
+  border:1px solid var(--border-strong);border-radius:var(--radius-sm);
+  background:var(--surface);color:var(--text);
+  font:400 14px/1.4 var(--font-sans);
+}
+.mn-input:focus,.mn-select:focus,.mn-textarea:focus{
+  outline:none;border-color:var(--brand);box-shadow:0 0 0 3px var(--brand-ring);
+}
+.mn-field{display:flex;flex-direction:column;gap:5px}
+.mn-field > label{font-size:13px;font-weight:600;color:var(--text-soft)}
+.mn-field .req{color:var(--red)}
+.mn-help{font-size:var(--text-sm);color:var(--muted)}
+.mn-error{background:var(--red-bg);color:var(--red);padding:9px 12px;
+  border-radius:var(--radius-sm);font-size:13px}
+
+/* ── TABLES ─────────────────────────────────────────────────────────────── */
+.mn-table{width:100%;border-collapse:collapse;font-size:14px}
+.mn-table th{
+  text-align:left;padding:9px 12px;
+  font-size:10.5px;font-weight:700;letter-spacing:var(--track-label);text-transform:uppercase;
+  color:var(--muted);border-bottom:1px solid var(--border-strong);
+}
+.mn-table td{padding:12px;border-bottom:1px solid var(--border);vertical-align:middle}
+.mn-table tbody tr:last-child td{border-bottom:none}
+.mn-table .num{text-align:right;font-variant-numeric:tabular-nums}
+.mn-table--hover tbody tr{cursor:pointer}
+.mn-table--hover tbody tr:hover{background:var(--surface-2)}
+
+/* ── PROGRESS ───────────────────────────────────────────────────────────── */
+.mn-progress{height:7px;background:var(--border);border-radius:var(--radius-pill);overflow:hidden}
+.mn-progress > i{display:block;height:100%;background:var(--brass);border-radius:var(--radius-pill);
+  transition:width .3s}
+.mn-progress > i.met{background:var(--green)}
+
+/* ── SIDEBAR ────────────────────────────────────────────────────────────── */
+.mn-sidebar{
+  background:var(--sidebar);color:var(--sidebar-text);
+  border-right:1px solid var(--sidebar-line);
+}
+.mn-nav a{
+  position:relative;display:block;padding:10px 14px;border-radius:var(--radius-sm);
+  color:var(--sidebar-dim);font-weight:500;cursor:pointer;
+  transition:background .12s,color .12s;
+}
+.mn-nav a:hover{background:rgba(255,255,255,.07);color:#fff;text-decoration:none}
+.mn-nav a.active{background:rgba(255,255,255,.11);color:#fff;font-weight:600}
+.mn-nav a.active::before{
+  content:'';position:absolute;left:0;top:9px;bottom:9px;width:3px;
+  border-radius:0 3px 3px 0;background:var(--brass-2);
+}
+
+/* ── ICONS — drawn, never typed. The brand forbids emoji in the product. ── */
+.mn-icon{display:inline-flex;align-items:center;justify-content:center}
+.mn-icon svg{width:1em;height:1em;fill:currentColor;display:block}
+
+/* ── PRINT ──────────────────────────────────────────────────────────────── */
+/* Reports always print light, whatever theme the screen is in. */
+@media print{
+  :root,html[data-theme="dark"]{color-scheme:light}
+  body{background:#fff;color:#14181C}
+  @page{margin:.6in}
+  .mn-report th{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+}
+.mn-report{color:#14181C;background:#fff;font-size:12px;color-scheme:light;
+  font-variant-numeric:tabular-nums}
+.mn-report__head{display:flex;justify-content:space-between;align-items:flex-start;
+  border-bottom:2px solid #14453F;padding-bottom:10px;margin-bottom:18px}
+.mn-report__head h1{margin:0;font-family:var(--font-serif);font-size:21px;font-weight:400}
+.mn-report__lockup{display:flex;align-items:center;gap:9px;margin-bottom:11px}
+.mn-report__lockup svg{width:26px;height:26px;flex-shrink:0}
+.mn-report__lockup .name{font-family:var(--font-serif);font-size:16px;
+  letter-spacing:var(--track-wordmark);text-transform:uppercase;color:#14453F;line-height:1}
+.mn-report h2{font-size:10px;text-transform:uppercase;letter-spacing:.16em;font-weight:700;
+  color:#14453F;border-bottom:1px solid #14453F;padding-bottom:4px;margin:0 0 9px}
+.mn-report table{width:100%;border-collapse:collapse;font-size:11px}
+.mn-report th,.mn-report td{border:1px solid #ddd;padding:4px 7px;text-align:left;vertical-align:top}
+.mn-report th{background:#E7EFED;color:#14453F;font-size:9px;text-transform:uppercase;
+  letter-spacing:.1em;font-weight:700}
+.mn-report td.num,.mn-report th.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.mn-report tfoot td{font-weight:700;border-top:2px solid #14453F;background:#FAF9F6}
+.mn-report__foot{margin-top:22px;padding-top:8px;border-top:1px solid #A8813C;
+  font-size:9.5px;color:#555;line-height:1.55}
