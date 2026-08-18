@@ -1,7 +1,7 @@
 {
-  "name": "capitalvault",
+  "name": "muniment",
   "version": "1.0.0",
-  "description": "Local single-user tracker for private placement offerings (PPMs), investors, and escrow funds.",
+  "description": "Muniment — the system of record for private offerings. Local single-user tracker for private placements (PPMs), investors, and escrow funds.",
   "type": "module",
   "private": true,
   "scripts": {

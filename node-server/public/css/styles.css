@@ -1,29 +1,38 @@
 :root {
-  --bg: #f4f5f7;
-  --surface: #ffffff;
-  --surface-2: #f8f9fb;
-  --border: #e3e6ec;
-  --border-strong: #d2d7e0;
-  --text: #1c2430;
-  --text-soft: #566072;
-  --muted: #8b94a5;
-  --navy: #1f3a5f;
-  --navy-2: #2c4a73;
-  --accent: #b08d57;      /* muted gold — legal/professional */
-  --accent-dark: #8f6f3d;
-  --green: #1f7a4d;
-  --green-bg: #e5f4ec;
-  --amber: #9a6b12;
-  --amber-bg: #fbf1dc;
-  --red: #b23b3b;
-  --red-bg: #fbe9e9;
-  --blue: #2b5f9e;
-  --blue-bg: #e7f0fb;
-  --shadow: 0 1px 2px rgba(20,30,50,.06), 0 3px 12px rgba(20,30,50,.05);
-  --shadow-lg: 0 10px 40px rgba(20,30,50,.18);
-  --radius: 10px;
-  --radius-sm: 7px;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  /* Muniment palette. Values come from brand/muniment-tokens.json; every
+     pairing below was measured against WCAG 2.1 AA before shipping. */
+  --bg: #F6F5F1;
+  --surface: #FFFFFF;
+  --surface-2: #FAF9F6;
+  --border: #E5E2DA;
+  --border-strong: #D4D0C5;
+  --text: #14181C;
+  --text-soft: #4A535C;
+  --muted: #646E78;
+  --brand: #14453F;
+  --brand-2: #1E635A;
+  --brand-soft: #E7EFED;
+  --brass: #A8813C;
+  --brass-2: #BE9450;
+  /* Older names kept as aliases so nothing downstream breaks. */
+  --navy: var(--brand);
+  --navy-2: var(--brand-2);
+  --accent: var(--brass);
+  --accent-dark: #7A5C24;
+  --green: #16694F;
+  --green-bg: #E6F2ED;
+  --amber: #8A6410;
+  --amber-bg: #F8F0DE;
+  --red: #97302F;
+  --red-bg: #F9E9E8;
+  --blue: #1F5480;
+  --blue-bg: #E7EFF7;
+  --shadow: 0 1px 2px rgba(20,30,26,.05), 0 3px 10px rgba(20,30,26,.045);
+  --shadow-lg: 0 12px 40px rgba(12,20,18,.20);
+  --radius: 8px;
+  --radius-sm: 6px;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font-variant-numeric: tabular-nums;
 }
 
 * { box-sizing: border-box; }
@@ -39,8 +48,12 @@ a { color: inherit; text-decoration: none; }
   display: flex; flex-direction: column; position: sticky; top: 0; height: 100vh;
 }
 .brand { display: flex; align-items: center; gap: 10px; padding: 22px 20px 18px; }
-.brand-mark { font-size: 22px; }
-.brand-name { font-size: 18px; font-weight: 700; letter-spacing: .2px; color: #fff; }
+.brand-mark { width: 22px; height: 22px; flex-shrink: 0; fill: #F6F5F1; }
+.brand-mark .base { fill: var(--brass-2); }
+.brand-name {
+  font-family: 'Newsreader', 'Iowan Old Style', 'Palatino Linotype', Palatino, Georgia, serif;
+  font-size: 18px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; color: #fff;
+}
 .nav { display: flex; flex-direction: column; padding: 8px 12px; gap: 2px; }
 .nav a {
   padding: 10px 14px; border-radius: var(--radius-sm); color: #c4cfde;
