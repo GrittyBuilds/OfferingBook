@@ -1,130 +1,164 @@
-# CapitalVault
+# Muniment
+
+*(MYOO-nih-ment)* — a document held as evidence of title. From the Latin
+*munire*, to fortify.
 
 A private, single-user tool for a law firm to run **Regulation D / private
-placement (PPM) offerings** — track each offering's process, the investors and
-their contact info, the subscriptions, and the escrow funds.
+placement (PPM) offerings** — the offerings, the investors, the subscriptions,
+the escrow, the closings and the certificates, all in one place, all on your
+own computer. There is no cloud, no login, and no data ever leaves your
+machine.
 
-Everything stays **on your own computer**. There is no cloud, no login, and no
-data ever leaves your machine.
+Formerly **CapitalVault** (and before that **OfferingBook**). Your existing
+data carries over automatically — see [Coming from CapitalVault](#coming-from-capitalvault).
 
 ---
 
-## The app: `CapitalVault.html` — no installation
+## The app: `Muniment.html` — no installation
 
-**To use it, just double-click `CapitalVault.html`** and it opens in your web
-browser. There is nothing to install — no Node.js, no server, no setup.
+**Double-click `Muniment.html`** and it opens in your web browser. There is
+nothing to install — no Node.js, no server, no setup.
 
-> **Use Google Chrome or Microsoft Edge.** These browsers let the app save your
-> data straight to a file on your computer (see below). It will still run in
-> other browsers, but the "save to a file you choose" feature is Chrome/Edge only.
+> **Use Google Chrome or Microsoft Edge on a computer.** These browsers let the
+> app autosave straight to a file you choose. It also runs on phones, tablets
+> and other browsers — see [On a phone or tablet](#on-a-phone-or-tablet).
+
+### Enter it once
+
+The organizing idea of this version: **information is entered once and carries
+forward**. You should never have to type the same fact into two places.
+
+- **Settings** (in the sidebar) holds the firm's constants: your firm name and
+  letterhead for printed reports, the report footer, and the defaults every
+  new offering starts from — exemption, security type, preferred return,
+  minimum investment, the pass-through cost label, and your usual escrow
+  agent. Set them once; every new offering opens pre-filled.
+- **Counterparties** — issuers, escrow agents, counsel — live in a directory
+  under Settings. Pick an escrow agent on an offering and its bank and account
+  number fill in with it.
+- **The checklist is a template.** Refine the process list once under Settings
+  and every future offering starts from your version.
+- **Forms fill themselves from the record.** A subscription opens on the
+  offering's minimum and works out units from the unit price. The escrow form
+  shows what the picked subscriber owes and offers the outstanding balance.
+  A certificate arrives numbered, classed, rated and dated from the closing
+  and the subscription behind it. Typing a new name into an investor search
+  offers to create the contact right there.
+- **The app proposes what the record already proves.** A strip on the
+  dashboard and on each offering suggests the entries you would otherwise
+  retype: a funded date taken from the cleared deposit, a status that its own
+  dates have overtaken, a checklist step the record evidences ("Form D is
+  recorded as filed on 9 March"), a deposit missing from the ledger, two
+  contact entries sharing a taxpayer ID. **Nothing is written until you press
+  Accept** — this is a securities file, and every figure in it should be one
+  you assented to. Accepted changes are listed under Settings; dismissed
+  suggestions stay dismissed.
 
 ### Where your data is stored
 
-When you first open the app, your data is kept **inside the browser** on your
-computer (so nothing is lost if you close and reopen it). To store it in a real
-**file on your computer** — recommended, so you can back it up and move it
-between machines — use the buttons at the bottom-left of the app:
+Your data is kept **inside the browser** on your computer, so nothing is lost
+when you close it. To store it in a real **file** — recommended, so your
+normal backups cover it — use the buttons at the bottom-left (or under
+**More** on a phone):
 
-- **New file…** — create a data file (e.g. `capitalvault-data.json`). Put it in a
-  synced or encrypted folder (OneDrive, Dropbox, an encrypted drive) and your
-  normal backups take care of it. From then on, every change **autosaves** to
-  that file.
-- **Open file…** — reopen a data file you created earlier (on this or another
-  computer).
-- **Save a copy** — download a timestamped backup copy at any time.
+- **New file…** — create a data file (e.g. `muniment-data.json`). Put it in a
+  synced or encrypted folder and every change **autosaves** to it.
+- **Open file…** — reconnect a data file on this or another computer.
+- **Save a copy** — download a timestamped backup at any time.
 
-The little dot in the bottom-left shows the status: **Saved to file** (green) or
-**Saved in this browser**. Next time you open the app it will offer to reconnect
-to your last file with one click.
+The dot at the bottom-left shows the save state. Files written by CapitalVault
+or OfferingBook open unchanged.
 
 ### What it tracks
 
-A floating **＋ Add** button in the sidebar lets you create anything — a new
-offering, an investor, a subscription, an escrow deposit, a closing, or a
-certificate — from any screen (it asks which offering when it needs one).
+- **Offerings** — issuer, exemption, security type, min/max raise (or
+  uncapped), price per unit, key dates, escrow details, pass-through costs,
+  tranches with their own terms, and status through the deal.
+- **Investors** — a contact book grouped by type; individuals entered
+  first / middle / last and listed *Last, First M.*; SSN/EIN masked in lists;
+  accreditation status and verification date.
+- **Subscriptions** — amount, units, tranche, agreement dates. The status
+  advances itself as the dates are filled in; only *Withdrawn* is ever chosen
+  by hand. The roster shows **committed and received** side by side.
+- **Escrow** — deposits, releases, refunds and fees, pending or cleared, with
+  book and cleared balances, per-investor received amounts, and bank
+  reconciliations that are **snapshots** — a reconciliation that agreed in
+  July still agrees with July after August's deposits arrive.
+- **Closings** — pick the investors, and the form proposes releasing what has
+  actually **cleared escrow** (never more than is in the account), states the
+  minimum-raise position before you fill anything in, and requires an explicit
+  acknowledgement to close below it. Recording a closing writes the escrow
+  release, marks the investors closed, and issues their certificates.
+- **Certificates** — numbered in funding-date order, grouped by class, with
+  % of class, total % ownership and accrued preferred return computed.
+  Ownership classes can each represent a fixed share of the company, with a
+  sponsor / non-cash class for carried interest.
+- **The printed summary** — your firm's letterhead and footer, an as-of date,
+  offering terms, closing readiness, the roster (withdrawn investors shown
+  struck through and excluded from totals), each closing, the certificate
+  roster, and a chronological escrow ledger with a running balance. Print →
+  Save as PDF for a closing binder or a client update.
 
-- **Offerings** — issuer, exemption (Reg D 506(b)/506(c), Reg A, Reg CF, …),
-  security type, target min/max raise, price per unit, key dates (launch, Form D,
-  closings), escrow agent/bank/account, and status through the deal. Options
-  include an **uncapped raise** (no maximum), **fractional investments allowed**
-  (minimum may be waived), and an **open-ended offering** (no final close deadline).
-  A default **preferred-return / interest rate** can be set for the offering.
-- **Pass-through costs** — offerings that charge legal / professional fees to
-  investors **on top of** their investment can turn this on; each subscription
-  then gets a cost field and the roster shows the **total due** (investment +
-  costs) per investor and in the printed summary.
-- **Tranches** — an offering can hold multiple **tranches** (sub-series), each
-  with its own price, minimums, min/max raise, class, return rate and close date.
-  Investors are assigned to a tranche when subscribing.
-- **Certificate roster** — on the **Certificates** tab, certificates are
-  **created automatically when you conduct a closing**: numbered in **funding-date
-  order** (re-numberable, or override individually), with capital contributed,
-  **% interest**, preferred-return rate, issue date and **accrued return to date**
-  all auto-populated (accrual = capital × rate × days from the closing date). You
-  can also add certificates by hand. The roster groups by class with per-class and
-  overall subtotals, and is included in the printable summary.
-  - **Ownership classes** (optional) — define classes that each represent a fixed
-    share of the whole company (e.g. **Common Units = 20%**, **Class A Units =
-    80%**). Within a class, holders split by capital, so each certificate shows
-    both its **% of its class** and its **total % ownership**. A class can be
-    marked **sponsor / non-cash** for units taken for *holding* the offering
-    rather than for cash — e.g. the sponsor takes 100% of the Common Units (20% of
-    the company) while investors hold 100% of the Class A Units (80%).
-- **A built-in process checklist** seeded on every new offering (engagement
-  letter → draft PPM → set up escrow → file Form D → collect subs → verify
-  accreditation → min-raise met → closing → release funds → post-closing), which
-  you can edit.
-- **Investors** — a reusable contact book organized into **sections by investor
-  type**. Individuals are entered by **first / middle / last name** and listed and
-  sorted **last name, first name, middle initial**; entities and trusts are entered
-  by entity name with a contact person. Every investor has an **SSN / EIN** field
-  (masked in lists), plus email, phone, address, accredited-investor status and
-  verification date, and notes. See every offering an investor is in.
-- **Subscriptions** — link investors to an offering with amount committed, units,
-  optional tranche and pass-through costs, funded date, and subscription-agreement
-  status (sent / signed / funded / closed). When adding an investor to an offering,
-  **type the name to search** your contact book.
-- **Escrow ledger** — deposits, releases, refunds and fees, each pending or
-  cleared, with a running **book balance** and **cleared balance**.
-  - **Closing conditions / min-raise:** the offering flags when cleared escrow
-    reaches the minimum raise, so you know a closing can proceed, and warns on
-    approaching close deadlines.
-  - **Bank reconciliation:** enter your escrow bank statement balance and the app
-    shows whether it matches the cleared balance it has tracked.
-- **Multiple closings / tranches** — on the **Closings** tab of an offering,
-  "Conduct a closing" to record a closing event: pick which investors are
-  included, enter the amount released to the issuer (auto-totaled from the
-  selected investors) and any fees deducted. The app records the escrow release
-  in the ledger, marks those investors **Closed**, and keeps a per-closing
-  history. Deleting a closing cleanly reverses it (removes its escrow entries and
-  re-opens its investors). Supports rolling / interim closes.
-- **Printable closing / investor summary** — on any offering, click **🖨 Print
-  summary** to generate a clean one-click report (offering terms, closing
-  readiness / min-raise status, escrow totals, the full investor list with
-  contact and accreditation, each closing, and the escrow ledger). Use your
-  browser's **Print → Save as PDF** to produce a PDF for a closing binder or
-  client update.
+### Working faster
+
+- **Ctrl/Cmd-K** (or `/`) opens a command palette over everything — offerings,
+  investors, actions, navigation. Type a few letters of anything.
+- **N** starts a new record from anywhere; **D**, **O**, **I**, **S** jump to
+  Dashboard, Offerings, Investors, Settings.
+- The brass **New record** button creates anything from anywhere, asking which
+  offering only when it needs one.
+- Light and dark themes; the choice is remembered per browser.
+
+### On a phone or tablet
+
+The same file adapts itself. On a phone the sidebar becomes a top bar and a
+bottom tab bar with a centre **+** button; rosters become cards; forms become
+bottom sheets that keep their Save button above the keyboard. Nothing else
+changes — same data, same features.
+
+On an **iPhone or iPad** every browser is WebKit, which cannot autosave to a
+chosen file. Records are still held safely in the browser there; use **Save a
+copy** for backups, and open the same file on a computer when you want
+autosave.
 
 ### Backups & safety notes
 
-- Your data file is a plain, human-readable `.json` file. Keep regular copies —
-  this is client escrow data. "Save a copy" makes a dated backup instantly.
-- To restore, use **Open file…** (or **Import**) and pick a backup.
-- The app runs entirely in your browser with no network access. Protect the file
-  and your computer with your firm's normal security (disk encryption, login).
+- The data file is plain, human-readable JSON. Keep regular copies — this is
+  client escrow data. "Save a copy" makes a dated backup instantly.
+- The app runs entirely in your browser with no network access. Protect the
+  file and your computer with your firm's normal security.
 - This app is a practice-management aid, not legal, accounting, or compliance
   advice, and it does not file anything with the SEC or states for you.
 
+### Coming from CapitalVault
+
+Nothing to do. Muniment reads data saved by CapitalVault and OfferingBook —
+browser-held records and `.json` files alike — and adopts it on first launch.
+A previously connected data file reconnects with one click. New backups
+download as `muniment-backup-<timestamp>.json`.
+
 ---
+
+## For developers
+
+- `Muniment.html` is the whole application — one file, no dependencies.
+- `brand/` holds the design tokens (`muniment-tokens.json`, with measured
+  WCAG contrast ratios), the standalone stylesheet (`muniment.css`) for
+  anything built alongside the app, the mark, and the rebrand notes.
+- `tools/smoke.mjs` is an optional headless test (requires Playwright, e.g.
+  the global install): it walks every route at four viewport widths and fails
+  on console errors, horizontal overflow, layouts that do not fit the device,
+  or broken values. Run `node tools/smoke.mjs` (add `--shots` for
+  screenshots).
 
 ## Optional: the local-server version (`node-server/`)
 
-The repository also contains an alternative implementation that runs as a small
-local server backed by a **SQLite database** file, for anyone who prefers that
-(for example, to later self-host it). **You do not need this** to use
-CapitalVault — the single `CapitalVault.html` file above is the recommended way.
+An alternative implementation that runs as a small local server backed by a
+SQLite database, for anyone who prefers that. **You do not need it** — the
+single `Muniment.html` file above is the recommended way, and the two store
+data separately.
 
-The server version requires [Node.js](https://nodejs.org) 20+. To run it:
+Requires [Node.js](https://nodejs.org) 20+:
 
 ```bash
 cd node-server
@@ -132,13 +166,7 @@ npm install
 npm start          # then open http://localhost:4000
 ```
 
-Its data lives in `node-server/data/capitalvault.db`. Note that the two versions
-store data separately and do not share it — pick one and stick with it. See the
-code under `node-server/` for details.
-
-> The newest features — the global **＋ Add** button, split first/middle/last
-> investor names with SSN/EIN and grouped contact book, pass-through costs,
-> **tranches**, **ownership classes / sponsor units**, and **automatic
-> certificate creation on closing** — are implemented in the recommended
-> single-file `CapitalVault.html`. The optional server version does not include
-> them.
+Its database lives in `node-server/data/muniment.db` (an existing
+`capitalvault.db` or `offeringbook.db` keeps being used automatically). The
+server version has the Muniment identity but not the newest features — the
+single-file app is where development happens.
