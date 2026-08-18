@@ -154,6 +154,8 @@ download as `muniment-backup-<timestamp>.json`.
     declines to overwrite because a person typed it.
   - `interactions.mjs` — accepting and dismissing suggestions, the command
     palette, inline contact creation, the closing guard.
+  - `chrome.mjs` — tabs, theme, titles, and the phone app bar, tab bar and
+    More sheet.
   - `regressions.mjs` — defects that reached the working tree once, pinned so
     they cannot come back quietly.
 
