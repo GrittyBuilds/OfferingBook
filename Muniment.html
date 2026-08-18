@@ -1438,8 +1438,12 @@ function formModal({title,fields,values={},submitLabel='Save',onSubmit,wide=fals
   function setValue(name,val){const inp=inputs[name];if(!inp)return;
     const f=fields.find(x=>x.name===name);
     if(f&&f.type==='checkbox')inp.checked=!!val;else if('value'in inp)try{inp.value=val==null?'':val;}catch{}}
-  for(const f of fields){const inp=inputs[f.name];if(!inp||f.type==='custom'||f.type==='hidden')continue;
-    const node=inp;const fire=()=>reflow(f.name);
+  for(const f of fields){const inp=inputs[f.name];if(!inp||f.type==='hidden')continue;
+    const fire=()=>reflow(f.name);
+    // A custom control announces itself by dispatching 'change' on its node,
+    // which is how the typeahead tells the form a contact has been chosen.
+    if(f.type==='custom'){if(inp.node)inp.node.addEventListener('change',fire);continue;}
+    const node=inp;
     node.addEventListener('change',fire);
     if(node.tagName==='INPUT'||node.tagName==='TEXTAREA')node.addEventListener('input',fire);}
   const submitBtn=el('button',{class:'btn btn-primary',type:'submit'},submitLabel);
@@ -1505,7 +1509,10 @@ function investorPicker(investors,selectedId,opts={}){
       el('span',{class:'ac-meta'},preferred.has(i.id)?'On this offering':(i.entity_type||'')))));
     if(create)menu.appendChild(create);
     menu.style.display='block';}
-  function pick(i){chosen=i.id;input.value=investorDisplayName(i);hide();opts.onPick&&opts.onPick(i);}
+  function pick(i){chosen=i.id;input.value=investorDisplayName(i);hide();
+    opts.onPick&&opts.onPick(i);
+    // Tell whatever form holds this control that its value moved.
+    node.dispatchEvent(new Event('change',{bubbles:true}));}
   // Subscribers on this offering sort first: they are who a deposit or a
   // certificate almost always belongs to.
   const order=(a,b)=>(preferred.has(b.id)-preferred.has(a.id))||investorSortKey(a).localeCompare(investorSortKey(b));
@@ -1513,13 +1520,20 @@ function investorPicker(investors,selectedId,opts={}){
     if(!q)return investors.slice().sort(order);
     return investors.filter(i=>investorDisplayName(i).toLowerCase().includes(q)||investorListName(i).toLowerCase().includes(q)||String(i.email||'').toLowerCase().includes(q)||String(i.tax_id||'').includes(q))
       .sort(order);}
-  input.addEventListener('input',()=>{chosen='';active=-1;render(filter());});
+  input.addEventListener('input',()=>{const had=chosen;chosen='';active=-1;render(filter());
+    if(had!=='')node.dispatchEvent(new Event('change',{bubbles:true}));});
   input.addEventListener('focus',()=>render(filter()));
   input.addEventListener('blur',()=>setTimeout(hide,160));
   input.addEventListener('keydown',e=>{
     if(e.key==='ArrowDown'){e.preventDefault();if(menu.style.display==='none')render(filter());active=Math.min(active+1,shown.length-1);render(shown);}
     else if(e.key==='ArrowUp'){e.preventDefault();active=Math.max(active-1,0);render(shown);}
-    else if(e.key==='Enter'){if(menu.style.display!=='none'&&shown[active]){e.preventDefault();pick(shown[active]);}}
+    else if(e.key==='Enter'){
+      if(menu.style.display==='none')return;
+      if(shown[active]){e.preventDefault();pick(shown[active]);}
+      // Nothing highlighted but a creatable name typed: Enter creates it, so
+      // the keyboard can do what the mouse can.
+      else if(opts.allowCreate&&input.value.trim()&&!shown.length){e.preventDefault();createFrom(input.value.trim());}
+    }
     else if(e.key==='Escape'){hide();}});
   return {node,get value(){return chosen===''?'':String(chosen);}};
 }
@@ -1549,8 +1563,16 @@ let db=EMPTY();
 let fileHandle=null;
 let fileName=null;
 // Set when the stored data could not be read. Nothing is written while it is
-// true, so an unreadable file is never replaced by an empty one.
+// true, so an unreadable document is never replaced by an empty one. Any
+// deliberate act that replaces the document — opening a file, creating one,
+// importing, or starting fresh — is the decision it was waiting for, and
+// clears it through adoptDocument().
 let readOnly=false;
+// Call whenever the user has knowingly chosen what the document should be.
+function adoptDocument(next){
+  if(next)db=next;
+  if(readOnly){readOnly=false;toast('Saving has resumed.','success');}
+}
 
 function normalize(obj){
   const base=EMPTY();
@@ -1611,8 +1633,18 @@ async function flushWrite(){
   await writing;
   mine.done();
 }
+// A debounced write that never happens is a lost edit. When the page is being
+// hidden or unloaded, write now rather than on the timer.
+function flushOnExit(){
+  if(!batch||readOnly)return;
+  clearTimeout(saveTimer);
+  flushWrite();
+}
+addEventListener('pagehide',flushOnExit);
+addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')flushOnExit();});
+
 async function persist(){
-  if(readOnly){toast('Saving is held: the data already in this browser could not be read.','error');return;}
+  if(readOnly){toast('Saving is held: the data already in this browser could not be read. Open your data file, or import a backup, to resume.','error');return;}
   try{localStorage.setItem(LS_KEY,serialize());quotaWarned=false;}
   catch(e){
     // Swallowing this used to leave the dot claiming "Saved in this browser"
@@ -1647,7 +1679,7 @@ async function newDataFile(){
   try{
     const h=await window.showSaveFilePicker({suggestedName:'muniment-data.json',
       types:[{description:'Muniment data',accept:{'application/json':['.json']}}]});
-    fileHandle=h;fileName=h.name;await persist();await idbSet('fileHandle',h);renderFileStatus();
+    fileHandle=h;fileName=h.name;adoptDocument(null);await persist();await idbSet('fileHandle',h);renderFileStatus();
     toast('Data file created — your changes now save here.','success');
   }catch(e){if(e.name!=='AbortError')toast('Could not create file: '+e.message,'error');}
 }
@@ -1661,7 +1693,7 @@ async function openDataFile(){
       const ok=await confirmDialog('Opening this file will replace the data currently loaded in this browser. Your other data file (if any) is not affected. Continue?',{danger:true,confirmLabel:'Open file'});
       if(!ok)return;
     }
-    db=parsed;fileHandle=h;fileName=h.name;await persist();await idbSet('fileHandle',h);renderFileStatus();refresh();
+    adoptDocument(parsed);fileHandle=h;fileName=h.name;await persist();await idbSet('fileHandle',h);renderFileStatus();refresh();
     toast('Data file opened.','success');
   }catch(e){if(e.name!=='AbortError')toast('Could not open file: '+e.message,'error');}
 }
@@ -1669,7 +1701,20 @@ async function reopenFromHandle(h){
   try{
     if(!(await verifyPermission(h,true))){toast('Permission to the file was denied.','error');return;}
     const text=await(await h.getFile()).text();
-    db=parseDB(text);fileHandle=h;fileName=h.name;await persist();renderFileStatus();refresh();
+    const parsed=parseDB(text);
+    // The browser mirror can legitimately be ahead of the file: a change made
+    // in the last moments before the tab closed reaches localStorage
+    // immediately but the file only after the write settles. Replacing
+    // silently would throw that work away, so say which is which and let the
+    // user choose.
+    if(hasData(db)&&!sameDocument(db,parsed)){
+      const mine=countRecords(db),theirs=countRecords(parsed);
+      const ok=await confirmDialog(
+        `The file holds ${theirs} record${theirs===1?'':'s'}; this browser holds ${mine}. Reconnecting replaces what is in the browser with what is in the file. Continue?`,
+        {danger:mine>theirs,confirmLabel:'Use the file'});
+      if(!ok)return;
+    }
+    adoptDocument(parsed);fileHandle=h;fileName=h.name;await persist();renderFileStatus();refresh();
     toast('Reconnected to '+h.name,'success');
   }catch(e){toast('Could not reopen file: '+e.message+' — it may have moved.','error');}
 }
@@ -1685,11 +1730,20 @@ function importFile(){
   inp.onchange=async()=>{const f=inp.files[0];if(!f)return;
     try{const parsed=parseDB(await f.text());
       if(hasData(db)&&!(await confirmDialog('Importing will replace the data currently loaded. Continue?',{danger:true,confirmLabel:'Import'})))return;
-      db=parsed;await persist();renderFileStatus();refresh();toast('Data imported.','success');
+      adoptDocument(parsed);await persist();renderFileStatus();refresh();toast('Data imported.','success');
     }catch(e){toast('Import failed: '+e.message,'error');}};
   inp.click();
 }
-function hasData(d){return d.offerings.length||d.investors.length;}
+// Everything a user could lose, not just the two headline collections: a firm
+// that has set up its settings and party directory but not yet opened an
+// offering still has plenty to lose.
+function countRecords(d){
+  return COLLECTIONS.reduce((n,k)=>n+((d[k]&&d[k].length)||0),0)
+    +Object.keys(d.settings||{}).length;
+}
+function hasData(d){return countRecords(d)>0;}
+// Two documents that would be identical on disk need no replace warning.
+function sameDocument(a,b){try{return JSON.stringify(a)===JSON.stringify(b);}catch{return false;}}
 
 let pendingHandle=null;
 function setSaveState(s){
@@ -1848,7 +1902,10 @@ function computeCertificates(offeringId){
       else if(anyClassTotals&&pctClass!=null)
         totalPct=undeclaredCapital>0&&c.capital_cents!=null
           ? (c.capital_cents/undeclaredCapital)*remainderPct
-          : pctClass*remainderPct/100;
+          // No capital anywhere in the undeclared classes: split the
+          // remainder evenly between them, then within by pctClass — one
+          // class taking the whole remainder per certificate over-allocates.
+          : pctClass*(remainderPct/Math.max(1,undeclaredNames.size))/100;
       else if(totalCapital>0&&c.capital_cents!=null)totalPct=(c.capital_cents/totalCapital)*100;
       else totalPct=pctClass;}
     // Accrued return to date: capital × rate × days / 365, from the closing date.
@@ -1978,16 +2035,27 @@ function scopeFor({offering,tranche,subscription,certificate}={}){
    DERIVATIONS — facts the record already proves, computed rather than retyped.
    ========================================================================== */
 // Deposits an investor has actually made on an offering.
-function investorEscrow(offeringId,investorId){
+function investorEscrow(offeringId,investorId,subscriptionId){
   offeringId=Number(offeringId);investorId=Number(investorId);
-  const rows=db.escrow.filter(e=>e.offering_id===offeringId&&e.investor_id===investorId);
+  let rows=db.escrow.filter(e=>e.offering_id===offeringId&&e.investor_id===investorId);
+  // When the ledger links rows to subscriptions and a subscription is asked
+  // for, answer for that subscription alone — an investor in two tranches has
+  // two funding dates, not one.
+  if(subscriptionId!=null&&rows.some(e=>e.subscription_id!=null))
+    rows=rows.filter(e=>e.subscription_id==null||e.subscription_id===Number(subscriptionId));
   const dep=rows.filter(e=>e.txn_type==='deposit');
   const cleared=dep.filter(e=>e.cleared);
-  const refunded=rows.filter(e=>e.txn_type==='refund').reduce((a,e)=>a+(e.amount_cents||0),0);
+  const ref=rows.filter(e=>e.txn_type==='refund');
+  const sum=xs=>xs.reduce((a,e)=>a+(Number(e.amount_cents)||0),0);
+  const clearedDeposits=sum(cleared),clearedRefunds=sum(ref.filter(e=>e.cleared));
   return{
-    deposits:dep.reduce((a,e)=>a+(e.amount_cents||0),0),
-    clearedDeposits:cleared.reduce((a,e)=>a+(e.amount_cents||0),0),
-    refunds:refunded,
+    deposits:sum(dep),
+    clearedDeposits,
+    refunds:sum(ref),
+    clearedRefunds,
+    // What of this subscriber's money is actually held: refunded funds are
+    // not raised, not releasable, and not funding.
+    clearedNet:clearedDeposits-clearedRefunds,
     rows:dep,
     // The earliest cleared deposit is the date the money was good.
     fundedDate:cleared.map(e=>e.txn_date).filter(Boolean).sort()[0]||null
@@ -2022,7 +2090,11 @@ function derivedUnits(sub,scope){
   if(!price||!sub.amount_committed_cents)return null;
   const raw=sub.amount_committed_cents/price;
   const frac=scope.offering&&scope.offering.fractional_allowed;
-  return frac?+raw.toFixed(6):Math.round(raw);
+  if(frac)return +raw.toFixed(6);
+  // Whole units only: when the amount does not divide by the price there is
+  // no unit count to assert, and rounding one up would state an allotment the
+  // subscription does not support.
+  return Math.abs(raw-Math.round(raw))<1e-6?Math.round(raw):null;
 }
 
 /* ---- Activity trail ------------------------------------------------------ */
@@ -2044,8 +2116,8 @@ function subscriptionFor(offeringId,investorId){offeringId=Number(offeringId);in
 function outstanding(sub,offering){
   if(!sub)return null;
   const due=subscriptionDue(sub,offering);
-  const got=investorEscrow(sub.offering_id,sub.investor_id).deposits;
-  return Math.max(0,due-got);}
+  const e=investorEscrow(sub.offering_id,sub.investor_id,sub.id);
+  return Math.max(0,due-(e.deposits-e.refunds));}
 // The next certificate number for an offering, following whatever numbering is
 // already in use rather than inventing one.
 // Follows plain sequential numbering only. A roster numbered "A-12" or
@@ -2059,7 +2131,9 @@ function nextCertNumber(offeringId){offeringId=Number(offeringId);
 // The method used on the last deposit for this offering — almost always the
 // same wire instructions as the one before.
 function lastEscrowMethod(offeringId){offeringId=Number(offeringId);
-  const rows=db.escrow.filter(e=>e.offering_id===offeringId&&e.method);
+  // Deposits only: subscribers tend to wire the same way each time, and an
+  // escrow agent's ACH fee says nothing about how the next investor will pay.
+  const rows=db.escrow.filter(e=>e.offering_id===offeringId&&e.method&&e.txn_type==='deposit');
   return rows.length?rows[rows.length-1].method:null;}
 // Date fields open on today unless the firm has turned that off.
 function defaultDate(){return settings().date_defaults?todayISO():'';}
@@ -2314,7 +2388,12 @@ const api={
     // Link and (optionally) close the included subscriptions.
     const markClosed=b.mark_closed!==false;
     for(const sid of subIds){const s=db.subscriptions.find(x=>x.id===sid&&x.offering_id===offeringId);
-      if(s){s.closing_id=closing.id;if(markClosed)s.status='Closed';if(!s.funded_date)s.funded_date=date;s.updated_at=nowISO();}}
+      if(s){s.closing_id=closing.id;if(markClosed)s.status='Closed';
+      // Remember that the closing supplied this date, so undoing the closing
+      // can take it back rather than leaving a subscriber on record as funded
+      // on a day nothing arrived.
+      if(!s.funded_date){s.funded_date=date;s.funded_date_from_closing=closing.id;}
+      s.updated_at=nowISO();}}
     // Auto-issue certificates for the included investors (feature: certificates on closing).
     let certsIssued=0;
     if(b.issue_certs!==false)certsIssued=generateCertificatesForClosing(offeringId,closing,subIds);
@@ -2324,7 +2403,14 @@ const api={
     // Reverse: remove its escrow entries, auto-issued certificates, and un-close its subscriptions.
     db.escrow=db.escrow.filter(e=>e.closing_id!==id);
     db.certificates=db.certificates.filter(cert=>cert.closing_id!==id);
-    db.subscriptions.forEach(s=>{if(s.closing_id===id){s.closing_id=null;if(s.status==='Closed')s.status='Funded';s.updated_at=nowISO();}});
+    db.subscriptions.forEach(s=>{if(s.closing_id===id){
+      s.closing_id=null;
+      // Give back the funding date the closing invented…
+      if(s.funded_date_from_closing===id){s.funded_date=null;delete s.funded_date_from_closing;}
+      // …and fall back to what the subscription's own dates say, rather than
+      // promoting a prospect who never paid to Funded.
+      if(s.status==='Closed')s.status=derivedSubStatus({...s,closing_id:null});
+      s.updated_at=nowISO();}});
     db.closings=db.closings.filter(x=>x.id!==id);await persist();return{ok:true};},
 
   // Certificate roster — units/interests issued to holders, possibly across
@@ -2451,7 +2537,7 @@ const TASK_PROOFS={
     const inv=ids.map(id=>db.investors.find(i=>i.id===id)).filter(Boolean);
     return inv.length&&inv.every(i=>i.accredited_status==='Verified')&&`All ${inv.length} subscriber${inv.length===1?' is':'s are'} verified accredited.`;},
   min_raise:o=>{const s=escrowSummary(o.id);
-    return o.target_min_cents!=null&&s.clearedNetDeposits>=o.target_min_cents&&
+    return o.target_min_cents>0&&s.clearedNetDeposits>=o.target_min_cents&&
       `${money(s.clearedNetDeposits)} has cleared escrow against a ${money(o.target_min_cents)} minimum.`;},
   closing_held:o=>{const n=db.closings.filter(c=>c.offering_id===o.id).length;
     return n>0&&`${n} closing${n===1?' is':'s are'} on record.`;},
@@ -2495,7 +2581,7 @@ function computeSuggestions(offeringId){
       if(s.status==='Withdrawn')continue;
       const inv=db.investors.find(i=>i.id===s.investor_id);
       const who=inv?investorDisplayName(inv):'This subscriber';
-      const esc=investorEscrow(o.id,s.investor_id);
+      const esc=investorEscrow(o.id,s.investor_id,s.id);
       const due=subscriptionDue(s,o);
 
       // A cleared deposit dates the funding. Do not make anyone retype it.
@@ -2510,7 +2596,11 @@ function computeSuggestions(offeringId){
       }
 
       // Funding recorded on the subscription but nothing in the escrow ledger.
-      if(s.funded_date&&!esc.rows.length&&due>0){
+      // An unattributed deposit of exactly this amount is very likely this
+      // money, recorded without the investor — propose nothing rather than a
+      // double entry the reconciliation would then chase.
+      const unattributed=db.escrow.some(e=>e.offering_id===o.id&&e.txn_type==='deposit'&&!e.investor_id&&e.amount_cents===due);
+      if(s.funded_date&&!esc.rows.length&&due>0&&!unattributed){
         out.push(sugg(`deposit-missing:${s.id}:${s.funded_date}:${due}`,o.id,
           `Record ${who}'s ${money(due)} deposit in the escrow ledger`,
           `The subscription is funded as at ${fmtDate(s.funded_date)}, but no deposit appears in the escrow ledger, so the cleared balance understates what was received.`,
@@ -2523,12 +2613,16 @@ function computeSuggestions(offeringId){
 
       // The label has fallen behind the dates underneath it.
       const derived=derivedSubStatus(s);
-      if(derived!==s.status&&(SUB_STATUS_RANK[derived]??0)>(SUB_STATUS_RANK[s.status]??0)){
+      if(!s.closing_id&&derived!==s.status&&(SUB_STATUS_RANK[derived]??0)>(SUB_STATUS_RANK[s.status]??0)){
         out.push(sugg(`sub-status:${s.id}:${derived}`,o.id,
           `Move ${who} to “${derived}”`,
           `The subscription is marked “${s.status}”, but its own dates put it at “${derived}”. Signed and funded totals on the printed summary are scored from this.`,
           derived==='Funded'?`Funded ${fmtDate(s.funded_date)}`:derived==='Sub signed'?`Signed ${fmtDate(s.sub_signed_date)}`:derived==='Sub sent'?`Sent ${fmtDate(s.sub_sent_date)}`:'Linked to a closing',
-          async()=>{s.status=derived;s.updated_at=nowISO();await persist();}));
+          // Re-derived at the moment it runs: an earlier accepted change may
+          // already have moved this subscription further on, and a label must
+          // only ever advance.
+          async()=>{const d=derivedSubStatus(s);
+            if(s.status!=='Withdrawn'&&(SUB_STATUS_RANK[d]??0)>(SUB_STATUS_RANK[s.status]??0)){s.status=d;s.updated_at=nowISO();await persist();}}));
       }
 
       // Units and the amount disagree with the price they are both drawn from.
@@ -2560,18 +2654,34 @@ function computeSuggestions(offeringId){
 
     /* -- Money in the ledger with no subscription behind it ---------------- */
     const subInvestors=new Set(subs.map(s=>s.investor_id));
+    // Grouped per depositor: two wires from one investor are one subscriber
+    // to add, not two subscriptions.
+    const strays=new Map();
     for(const e of db.escrow.filter(x=>x.offering_id===o.id&&x.txn_type==='deposit'&&x.investor_id)){
       if(subInvestors.has(e.investor_id))continue;
-      const inv=db.investors.find(i=>i.id===e.investor_id);
-      out.push(sugg(`sub-missing:${e.id}`,o.id,
+      if(!strays.has(e.investor_id))strays.set(e.investor_id,[]);
+      strays.get(e.investor_id).push(e);
+    }
+    for(const[invId,rows]of strays){
+      const inv=db.investors.find(i=>i.id===invId);
+      const total=rows.reduce((a,e)=>a+(Number(e.amount_cents)||0),0);
+      const firstCleared=rows.filter(e=>e.cleared).map(e=>e.txn_date).filter(Boolean).sort()[0]||null;
+      out.push(sugg(`sub-missing:${o.id}:${invId}:${total}`,o.id,
         `Add ${inv?investorDisplayName(inv):'this depositor'} to the offering`,
-        'A deposit is recorded against someone who is not a subscriber on this offering, so the amount sits in escrow against nothing.',
-        `${money(e.amount_cents)} deposited ${fmtDate(e.txn_date)}`,
-        async()=>{db.subscriptions.push({id:nextId('subscriptions'),offering_id:o.id,investor_id:e.investor_id,
-          amount_committed_cents:e.amount_cents,units:null,costs_cents:null,tranche_id:null,
-          funded_date:e.cleared?e.txn_date:null,status:e.cleared?'Funded':'Prospect',
-          sub_sent_date:null,sub_signed_date:null,notes:'Created from an escrow deposit.',closing_id:null,
-          source:'proposed',created_at:nowISO(),updated_at:nowISO()});await persist();},
+        `${rows.length===1?'A deposit is':rows.length+' deposits are'} recorded against someone who is not a subscriber on this offering, so the money sits in escrow against nothing.`,
+        `${money(total)} deposited`,
+        async()=>{
+          // Re-checked at apply time: an earlier accept may already have
+          // added this depositor.
+          if(db.subscriptions.some(x=>x.offering_id===o.id&&x.investor_id===invId))return;
+          const sub={id:nextId('subscriptions'),offering_id:o.id,investor_id:invId,
+            amount_committed_cents:total,units:null,costs_cents:null,tranche_id:null,
+            funded_date:firstCleared,status:firstCleared?'Funded':'Prospect',
+            sub_sent_date:null,sub_signed_date:null,notes:'Created from the escrow ledger.',closing_id:null,
+            source:'proposed',created_at:nowISO(),updated_at:nowISO()};
+          db.subscriptions.push(sub);
+          rows.forEach(e=>{if(e.subscription_id==null)e.subscription_id=sub.id;});
+          await persist();},
         'warn'));
     }
 
@@ -2583,7 +2693,7 @@ function computeSuggestions(offeringId){
       const proof=TASK_PROOFS[proofKey](o);
       if(!proof)continue;
       out.push(sugg(`task:${t.id}`,o.id,`Mark “${t.label}” complete`,proof,'Proved by the record',
-        async()=>{t.done=1;t.done_date=new Date().toISOString().slice(0,10);await persist();}));
+        async()=>{t.done=1;t.done_date=todayISO();await persist();}));
     }
     // The converse: a step ticked whose date the offering never got.
     const formD=tasks.find(t=>(t.proves||DEFAULT_CHECKLIST_PROOFS[t.label])==='form_d');
@@ -2632,7 +2742,12 @@ function computeSuggestions(offeringId){
     /* -- Certificates against their subscriptions -------------------------- */
     for(const c of db.certificates.filter(x=>x.offering_id===o.id)){
       if(c.no_capital||!c.investor_id)continue;
-      const s=subs.find(x=>x.investor_id===c.investor_id);
+      // The certificate's own link first; else the investor's single live
+      // subscription. Two live subscriptions is ambiguous — say nothing
+      // rather than compare against the wrong one.
+      let s=c.subscription_id?subs.find(x=>x.id===c.subscription_id):null;
+      if(!s){const live=subs.filter(x=>x.investor_id===c.investor_id&&x.status!=='Withdrawn');
+        if(live.length!==1)continue;s=live[0];}
       if(!s||s.amount_committed_cents==null||c.capital_cents==null)continue;
       if(c.capital_cents!==s.amount_committed_cents){
         const inv=db.investors.find(i=>i.id===c.investor_id);
@@ -2832,15 +2947,16 @@ function openSubscriptionForm(offering,investors,existing,onDone){
         help:'Fees the investor pays on top of the investment amount.'}:null,
       {name:'units',label:'Units',type:'number',half:true,step:'any',
         help:unitPrice?`Calculated at ${money(unitPrice)} a unit — override it if the allotment differs.`:'Set a price per unit on the offering and this fills itself.',
-        onChange:(v,f)=>{if(!unitPrice)return;
+        onChange:(v,f)=>{
           // Recompute only when the amount or the tranche moved. Redrawing the
           // form must not refill a field the user has just cleared.
           if(f.changed&&f.changed!=='amount_committed'&&f.changed!=='tranche_id')return;
-          const cents=dollarsToCents(v.amount_committed);
-          if(cents==null)return;
-          const raw=cents/unitPrice;
-          const derived=o.fractional_allowed?+raw.toFixed(6):Math.round(raw);
-          if(!v.units)f.setValue('units',derived);}},
+          // The price belongs to the tranche picked NOW — switching tranches
+          // mid-form must not keep deriving from the old one.
+          const tr=tranches.find(t=>t.id===Number(v.tranche_id))||null;
+          const derived=derivedUnits({amount_committed_cents:dollarsToCents(v.amount_committed)},
+            scopeFor({offering:o,tranche:tr}));
+          if(derived!=null&&!v.units)f.setValue('units',derived);}},
       {name:'status',label:'Status',type:'select',options:SUBSCRIPTION_STATUSES,half:true,
         help:'Set by the dates below as you fill them in. Withdrawn is the only one you choose outright.'},
       {name:'sub_sent_date',label:'Sub agreement sent',type:'date',half:true,
@@ -2868,7 +2984,8 @@ function openEscrowForm(offeringId,investors,existing,onDone){
     clear(context);
     const sub=investorId?subscriptionFor(offeringId,investorId):null;
     if(!sub){if(investorId)context.appendChild(el('span',{},'Not a subscriber on this offering yet.'));return null;}
-    const due=subscriptionDue(sub,o),got=investorEscrow(offeringId,sub.investor_id).deposits,left=Math.max(0,due-got);
+    const e=investorEscrow(offeringId,sub.investor_id,sub.id);
+    const due=subscriptionDue(sub,o),got=e.deposits-e.refunds,left=Math.max(0,due-got);
     context.appendChild(el('span',{},
       `Subscribed ${money(due)}`,
       got?` · ${money(got)} received`:' · nothing received yet',
@@ -3052,8 +3169,8 @@ async function tranchesTab(state,drawTab,reloadOffering){
   const tranches=Array.isArray(offering.tranches)?offering.tranches:[];
   const subs=await api.listSubscriptions(offering.id);
   const addBtn=el('button',{class:'btn btn-primary',onclick:()=>openTrancheForm(offering,null,async()=>{await reloadOffering();drawTab();})},'@icon:plus','Add tranche');
-  const count=id=>subs.filter(s=>s.tranche_id===id).length;
-  const raised=id=>subs.filter(s=>s.tranche_id===id).reduce((a,s)=>a+(s.amount_committed_cents||0),0);
+  const count=id=>subs.filter(s=>s.tranche_id===id&&s.status!=='Withdrawn').length;
+  const raised=id=>subs.filter(s=>s.tranche_id===id&&s.status!=='Withdrawn').reduce((a,s)=>a+(s.amount_committed_cents||0),0);
   return el('div',{},
     el('div',{class:'section-head'},el('h2',{},'Tranches'),addBtn),
     el('p',{class:'muted-text',style:'margin:-6px 0 16px'},'Sub-series within this offering. Each tranche may carry its own price, minimums, return rate, class and closing terms. Investors and certificates can be assigned to a tranche.'),
@@ -3106,11 +3223,13 @@ async function investorsTab(state,drawTab,reloadOffering){
   const subs=await api.listSubscriptions(offering.id);
   const tranches=Array.isArray(offering.tranches)?offering.tranches:[];
   const trancheName=id=>{const t=tranches.find(x=>x.id===id);return t?t.name:null;};
-  const committed=subs.reduce((a,s)=>a+(s.amount_committed_cents||0),0);
-  const costs=subs.reduce((a,s)=>a+(s.costs_cents||0),0);
+  // Withdrawn rows stay on the roster and out of the figures.
+  const live=subs.filter(s=>s.status!=='Withdrawn');
+  const committed=live.reduce((a,s)=>a+(s.amount_committed_cents||0),0);
+  const costs=live.reduce((a,s)=>a+(s.costs_cents||0),0);
   const showCosts=!!offering.pass_through_costs;
   const addBtn=el('button',{class:'btn btn-primary',onclick:()=>openSubscriptionForm(offering,state.investors,null,async()=>{await reloadOffering();drawTab();})},'@icon:plus','Add investor');
-  const received=subs.reduce((a,s)=>a+investorEscrow(offering.id,s.investor_id).clearedDeposits,0);
+  const received=live.reduce((a,s)=>a+Math.max(0,investorEscrow(offering.id,s.investor_id,s.id).clearedNet),0);
   const figures=el('div',{class:'section-figures'},
     el('span',{},el('strong',{},money(committed)),' committed'),
     el('span',{},el('strong',{},money(received)),' received'),
@@ -3126,7 +3245,7 @@ async function investorsTab(state,drawTab,reloadOffering){
       {label:'Committed',num:true,render:s=>money(s.amount_committed_cents)},
       // What has actually arrived, against what was promised. This is the
       // column a subscription roster is really for, and it was not here.
-      {label:'Received',num:true,render:s=>{const got=investorEscrow(offering.id,s.investor_id).clearedDeposits;
+      {label:'Received',num:true,render:s=>{const got=Math.max(0,investorEscrow(offering.id,s.investor_id,s.id).clearedNet);
         const due=subscriptionDue(s,offering);
         return el('span',{class:got>=due&&due>0?'':'muted-text'},money(got));}},
       showCosts?{label:'Costs',num:true,hide:true,render:s=>s.costs_cents?money(s.costs_cents):'—'}:null,
@@ -3281,7 +3400,7 @@ function openClosingForm(offeringId,openSubs,existingCount,onDone){
   const es=escrowSummary(offeringId);
   // What each selected subscriber has actually put into escrow, and what is
   // available to release. A closing releases money, not promises.
-  const clearedFor=sub=>investorEscrow(offeringId,sub.investor_id).clearedDeposits;
+  const clearedFor=sub=>Math.max(0,investorEscrow(offeringId,sub.investor_id,sub.id).clearedNet);
   const labelInput=el('input',{type:'text',class:'inline-input',style:'width:100%',value:`Closing ${existingCount+1}`});
   const dateInput=el('input',{type:'date',class:'inline-input',style:'width:100%',value:defaultDate()});
   const amountInput=el('input',{type:'text',class:'inline-input money-input',placeholder:'0.00',inputmode:'decimal',style:'width:100%'});
@@ -3350,8 +3469,10 @@ function openClosingForm(offeringId,openSubs,existingCount,onDone){
       errorBox.textContent=`Only ${money(es.clearedNetDeposits)} has cleared escrow against a ${money(o.target_min_cents)} minimum raise. Tick the acknowledgement to close anyway.`;
       errorBox.style.display='block';return;}
     const asked=dollarsToCents(amountInput.value)||0;
-    if(asked>es.clearedBalance){
-      errorBox.textContent=`Only ${money(es.clearedBalance)} has cleared escrow, so ${money(asked)} cannot be released.`;
+    const askedFees=dollarsToCents(feesInput.value)||0;
+    // Fees leave escrow with the release; both together must fit.
+    if(asked+askedFees>es.clearedBalance){
+      errorBox.textContent=`Only ${money(es.clearedBalance)} has cleared escrow, so ${money(asked)}${askedFees?` plus ${money(askedFees)} in fees`:''} cannot come out of it.`;
       errorBox.style.display='block';return;}
     submitBtn.disabled=true;submitBtn.textContent='Saving…';
     try{
@@ -3593,7 +3714,7 @@ async function renderInvestor(id){
           {label:'Offering',primary:true,render:s=>el('span',{class:'link'},s.offering_name)},
           {label:'Status',render:s=>pill(s.status,SUBSCRIPTION_KIND[s.status]||'muted')},
           {label:'Committed',num:true,render:s=>money(s.amount_committed_cents)},
-          {label:'Received',num:true,render:s=>money(investorEscrow(s.offering_id,inv.id).clearedDeposits)}
+          {label:'Received',num:true,render:s=>money(Math.max(0,investorEscrow(s.offering_id,inv.id,s.id).clearedNet))}
         ],inv.subscriptions,{caption:'Offerings this investor is on',
           rowAttrs:s=>({tabindex:'0',role:'link',
             onclick:()=>navigate(`/offerings/${s.offering_id}?tab=Investors`),
@@ -3664,7 +3785,11 @@ function buildSummaryReport(o,subs,escrowData,reconData,closingsData,certsData){
 
   // Chronological, oldest first, with a running book balance: the order a
   // ledger is read in, and the column that lets its total be checked by eye.
-  const txns=escrowData.transactions.slice().sort((a,b)=>
+  // Only the four movement types the balances are built from — a row with an
+  // unknown type (a hand-edited file) must not appear in a ledger whose stated
+  // totals exclude it.
+  const txns=escrowData.transactions.filter(t=>['deposit','release','refund','fee'].includes(t.txn_type))
+    .slice().sort((a,b)=>
     (a.txn_date||a.created_at||'').localeCompare(b.txn_date||b.created_at||'')||a.id-b.id);
   let running=0;
   const ledgerTable=txns.length?el('table',{class:'report-table'},
@@ -3821,8 +3946,18 @@ function suggestionPanel(scope,onDone,{limit=6,heading='Suggested'}={}){
   const acceptAll=applicable.length>1?el('button',{class:'btn btn-ghost btn-sm',type:'button',onclick:async()=>{
     const ok=await confirmDialog(`Accept all ${applicable.length} suggestions? Each one writes the change it describes. You can review them afterwards under Settings.`,{confirmLabel:'Accept all'});
     if(!ok)return;
-    for(const s of applicable){try{await s.apply();logActivity('accepted',s.title,s.offeringId,s.key);}catch{}}
-    await persist();toast(`${applicable.length} changes recorded.`,'success');onDone();
+    // Recomputed between applies: an accepted change can retire or reshape
+    // the ones after it, and a retired suggestion must not run stale.
+    let done=0,failed=0;
+    for(const key of applicable.map(s=>s.key)){
+      const fresh=computeSuggestions(scope).find(x=>x.key===key&&x.apply);
+      if(!fresh)continue;
+      try{await fresh.apply();logActivity('accepted',fresh.title,fresh.offeringId,fresh.key);done++;}
+      catch{failed++;}
+    }
+    await persist();
+    toast(failed?`${done} recorded; ${failed} could not be applied.`:(done?`${done} change${done===1?'':'s'} recorded.`:'Nothing left to record.'),failed?'error':'success');
+    onDone();
   }},`Accept all ${applicable.length}`):null;
   return el('section',{class:'panel suggest-panel'},
     el('div',{class:'suggest-head'},
@@ -3885,7 +4020,7 @@ async function renderSettings(){
         iconButton('trash','Remove this step',()=>{items.splice(idx,1);draw();},{danger:true}))));};
     draw();
     const body=el('div',{class:'modal-body'},
-      el('p',{class:'field-help'},'Every new offering starts from this list. Changing it here does not disturb offerings already on record.'),
+      el('p',{class:'field-help'},'Every new offering starts from this list. Changing it here does not disturb offerings already on record. Steps with a “the record can prove this” badge keep their proof only while their wording stays exactly as written.'),
       list,
       el('div',{style:'display:flex;gap:8px;margin-top:12px'},
         el('button',{class:'btn btn-ghost btn-sm',type:'button',onclick:()=>{items.push('');draw();}},'@icon:plus','Add a step'),
@@ -4102,7 +4237,7 @@ function openPalette(){
     if(e.key==='ArrowDown'){e.preventDefault();active=Math.min(active+1,shown.length-1);draw();}
     else if(e.key==='ArrowUp'){e.preventDefault();active=Math.max(active-1,0);draw();}
     else if(e.key==='Enter'){e.preventDefault();if(shown[active])run(shown[active]);}
-    else if(e.key==='Escape'){closePalette();}
+    else if(e.key==='Escape'){e.stopPropagation();closePalette();}
   });
   const root=document.getElementById('cmd-root');
   root.appendChild(el('div',{class:'cmd-backdrop',onclick:e=>{if(e.target===e.currentTarget)closePalette();}},
@@ -4118,7 +4253,11 @@ function openPalette(){
 // The shortcut map. Nothing fires while a field, a dialog or the palette has
 // the keyboard.
 document.addEventListener('keydown',e=>{
-  if((e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==='k'){e.preventDefault();openPalette();return;}
+  if((e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==='k'){
+    // Not over an open dialog: a form half filled in owns the keyboard, and
+    // one Escape would otherwise close the palette and the form together.
+    if(escHandler)return;
+    e.preventDefault();openPalette();return;}
   if(cmdOpen||escHandler)return;
   const t=e.target;
   if(t&&(t.tagName==='INPUT'||t.tagName==='TEXTAREA'||t.tagName==='SELECT'||t.isContentEditable))return;
