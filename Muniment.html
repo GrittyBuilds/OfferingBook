@@ -1438,8 +1438,12 @@ function formModal({title,fields,values={},submitLabel='Save',onSubmit,wide=fals
   function setValue(name,val){const inp=inputs[name];if(!inp)return;
     const f=fields.find(x=>x.name===name);
     if(f&&f.type==='checkbox')inp.checked=!!val;else if('value'in inp)try{inp.value=val==null?'':val;}catch{}}
-  for(const f of fields){const inp=inputs[f.name];if(!inp||f.type==='custom'||f.type==='hidden')continue;
-    const node=inp;const fire=()=>reflow(f.name);
+  for(const f of fields){const inp=inputs[f.name];if(!inp||f.type==='hidden')continue;
+    const fire=()=>reflow(f.name);
+    // A custom control announces itself by dispatching 'change' on its node,
+    // which is how the typeahead tells the form a contact has been chosen.
+    if(f.type==='custom'){if(inp.node)inp.node.addEventListener('change',fire);continue;}
+    const node=inp;
     node.addEventListener('change',fire);
     if(node.tagName==='INPUT'||node.tagName==='TEXTAREA')node.addEventListener('input',fire);}
   const submitBtn=el('button',{class:'btn btn-primary',type:'submit'},submitLabel);
@@ -1505,7 +1509,10 @@ function investorPicker(investors,selectedId,opts={}){
       el('span',{class:'ac-meta'},preferred.has(i.id)?'On this offering':(i.entity_type||'')))));
     if(create)menu.appendChild(create);
     menu.style.display='block';}
-  function pick(i){chosen=i.id;input.value=investorDisplayName(i);hide();opts.onPick&&opts.onPick(i);}
+  function pick(i){chosen=i.id;input.value=investorDisplayName(i);hide();
+    opts.onPick&&opts.onPick(i);
+    // Tell whatever form holds this control that its value moved.
+    node.dispatchEvent(new Event('change',{bubbles:true}));}
   // Subscribers on this offering sort first: they are who a deposit or a
   // certificate almost always belongs to.
   const order=(a,b)=>(preferred.has(b.id)-preferred.has(a.id))||investorSortKey(a).localeCompare(investorSortKey(b));
@@ -1513,7 +1520,8 @@ function investorPicker(investors,selectedId,opts={}){
     if(!q)return investors.slice().sort(order);
     return investors.filter(i=>investorDisplayName(i).toLowerCase().includes(q)||investorListName(i).toLowerCase().includes(q)||String(i.email||'').toLowerCase().includes(q)||String(i.tax_id||'').includes(q))
       .sort(order);}
-  input.addEventListener('input',()=>{chosen='';active=-1;render(filter());});
+  input.addEventListener('input',()=>{const had=chosen;chosen='';active=-1;render(filter());
+    if(had!=='')node.dispatchEvent(new Event('change',{bubbles:true}));});
   input.addEventListener('focus',()=>render(filter()));
   input.addEventListener('blur',()=>setTimeout(hide,160));
   input.addEventListener('keydown',e=>{
@@ -2123,7 +2131,9 @@ function nextCertNumber(offeringId){offeringId=Number(offeringId);
 // The method used on the last deposit for this offering — almost always the
 // same wire instructions as the one before.
 function lastEscrowMethod(offeringId){offeringId=Number(offeringId);
-  const rows=db.escrow.filter(e=>e.offering_id===offeringId&&e.method);
+  // Deposits only: subscribers tend to wire the same way each time, and an
+  // escrow agent's ACH fee says nothing about how the next investor will pay.
+  const rows=db.escrow.filter(e=>e.offering_id===offeringId&&e.method&&e.txn_type==='deposit');
   return rows.length?rows[rows.length-1].method:null;}
 // Date fields open on today unless the firm has turned that off.
 function defaultDate(){return settings().date_defaults?todayISO():'';}
@@ -4227,7 +4237,7 @@ function openPalette(){
     if(e.key==='ArrowDown'){e.preventDefault();active=Math.min(active+1,shown.length-1);draw();}
     else if(e.key==='ArrowUp'){e.preventDefault();active=Math.max(active-1,0);draw();}
     else if(e.key==='Enter'){e.preventDefault();if(shown[active])run(shown[active]);}
-    else if(e.key==='Escape'){closePalette();}
+    else if(e.key==='Escape'){e.stopPropagation();closePalette();}
   });
   const root=document.getElementById('cmd-root');
   root.appendChild(el('div',{class:'cmd-backdrop',onclick:e=>{if(e.target===e.currentTarget)closePalette();}},
@@ -4243,7 +4253,11 @@ function openPalette(){
 // The shortcut map. Nothing fires while a field, a dialog or the palette has
 // the keyboard.
 document.addEventListener('keydown',e=>{
-  if((e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==='k'){e.preventDefault();openPalette();return;}
+  if((e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==='k'){
+    // Not over an open dialog: a form half filled in owns the keyboard, and
+    // one Escape would otherwise close the palette and the form together.
+    if(escHandler)return;
+    e.preventDefault();openPalette();return;}
   if(cmdOpen||escHandler)return;
   const t=e.target;
   if(t&&(t.tagName==='INPUT'||t.tagName==='TEXTAREA'||t.tagName==='SELECT'||t.isContentEditable))return;

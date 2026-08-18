@@ -145,11 +145,17 @@ download as `muniment-backup-<timestamp>.json`.
 - `brand/` holds the design tokens (`muniment-tokens.json`, with measured
   WCAG contrast ratios), the standalone stylesheet (`muniment.css`) for
   anything built alongside the app, the mark, and the rebrand notes.
-- `tools/smoke.mjs` is an optional headless test (requires Playwright, e.g.
-  the global install): it walks every route at four viewport widths and fails
-  on console errors, horizontal overflow, layouts that do not fit the device,
-  or broken values. Run `node tools/smoke.mjs` (add `--shots` for
-  screenshots).
+- `tools/` holds optional headless tests (they need Playwright; the app
+  itself needs nothing). Run any of them with `node tools/<name>.mjs`:
+  - `smoke.mjs` — walks every route at four viewport widths and fails on
+    console errors, horizontal overflow, layouts that do not fit the device,
+    or broken values. `--shots` also writes screenshots.
+  - `forms.mjs` — what each form arrives pre-filled with, and what it
+    declines to overwrite because a person typed it.
+  - `interactions.mjs` — accepting and dismissing suggestions, the command
+    palette, inline contact creation, the closing guard.
+  - `regressions.mjs` — defects that reached the working tree once, pinned so
+    they cannot come back quietly.
 
 ## Optional: the local-server version (`node-server/`)
 
