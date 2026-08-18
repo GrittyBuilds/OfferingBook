@@ -36,7 +36,8 @@ const { chromium } = await (async () => {
   console.error('playwright is not installed. Try:  npm i -D playwright')
   process.exit(2)
 })()
-const APP_URL = 'file://' + join(__dirname, '..', 'Muniment.html')
+// MUNIMENT_APP lets the harness point at a work-in-progress copy.
+const APP_URL = 'file://' + (process.env.MUNIMENT_APP || join(__dirname, '..', 'Muniment.html'))
 const SHOTS = process.argv.includes('--shots')
 const SHOT_DIR = join(__dirname, '..', '.smoke-shots')
 if (SHOTS) mkdirSync(SHOT_DIR, { recursive: true })
@@ -147,6 +148,12 @@ async function walk (page, vp) {
     }
     await shot(`offering-${tab.toLowerCase()}`)
   }
+
+  // Settings
+  await go('#/settings', 'settings')
+  const setText = await page.locator('#view').innerText()
+  if (!/Defaults for new offerings/i.test(setText)) fail(where, 'settings page did not render its defaults panel')
+  if (/undefined|NaN|\[object Object\]/.test(setText)) fail(where, 'settings rendered a broken value')
 
   // Investors
   await go('#/investors', 'investors')
