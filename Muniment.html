@@ -2296,9 +2296,17 @@ function computeCertificates(offeringId,asOf){
   const o=db.offerings.find(x=>x.id===offeringId);
   const classes=(o&&Array.isArray(o.classes))?o.classes:[];
   const classByName=new Map(classes.map(c=>[c.name,c]));
-  const raw=db.certificates.filter(c=>c.offering_id===offeringId).map(c=>{
-    const i=db.investors.find(x=>x.id===c.investor_id);
-    return{...c,holder_name:i?investorDisplayName(i):(c.holder_name||null)};});
+  // A certificate cancelled by a transfer or a redemption is history, not a
+  // holding: it stays in the file and out of the cap table. One cancelled on
+  // or before the as-of date was still live before it, which is how a roster
+  // dated last June shows last June's holders.
+  const raw=db.certificates.filter(c=>c.offering_id===offeringId)
+    .filter(c=>!c.cancelled_date||c.cancelled_date>asOf)
+    // A successor is not a holding until the transfer that created it happened.
+    .filter(c=>!c.issued_by_transfer_date||c.issued_by_transfer_date<=asOf)
+    .map(c=>{
+      const i=db.investors.find(x=>x.id===c.investor_id);
+      return{...c,holder_name:i?investorDisplayName(i):(c.holder_name||null)};});
   const classCapital={},classCount={};let totalCapital=0;
   for(const c of raw){const k=c.class_name||'Unclassified';
     classCapital[k]=(classCapital[k]||0)+(Number(c.capital_cents)||0);
@@ -2378,6 +2386,130 @@ function computeCertificates(offeringId,asOf){
       'pct_of_class_calc','pct_of_class_shown',100);
   return{offering:o,classes,certificates:enriched,classCapital,classCount,totalCapital,asOf,
     hasClassTotals:anyClassTotals,classNames:[...new Set(raw.map(c=>c.class_name).filter(Boolean))]};
+}
+
+/* ============================================================================
+   AFTER THE CLOSING
+
+   The app modelled the deal beautifully up to the moment the certificate was
+   issued and then stopped, while the file itself runs for years past that
+   point. Distributions, transfers, redemptions and staged funding all live
+   here. Escrow is deliberately untouched by any of it: escrow is the account
+   money sits in before a closing, and none of this happens before one.
+   ========================================================================== */
+
+/* Split `total` cents across weights, exactly. Largest remainder again, for
+   the same reason as the percentage column: a distribution whose parts come
+   to a cent less than the cheque is a distribution somebody has to explain. */
+function allocateCents(total,weights){
+  const sum=weights.reduce((a,w)=>a+(Number(w)||0),0);
+  if(!(sum>0)||!total)return weights.map(()=>0);
+  const exact=weights.map(w=>total*(Number(w)||0)/sum);
+  const floors=exact.map(Math.floor);
+  let short=total-floors.reduce((a,n)=>a+n,0);
+  const order=exact.map((v,i)=>[v-floors[i],i]).sort((a,b)=>b[0]-a[0]||a[1]-b[1]);
+  for(let k=0;k<order.length&&short>0;k++,short--)floors[order[k][1]]++;
+  for(let k=order.length-1;k>=0&&short<0;k--,short++)floors[order[k][1]]--;
+  return floors;
+}
+
+const DISTRIBUTION_BASES=[
+  {value:'pref-first',label:'Preferred return first, then capital',
+   help:'Pays what has accrued and is still owed, in proportion to it. Anything left over is returned as capital, pro rata by ownership.'},
+  {value:'pro-rata',label:'Pro rata by ownership',
+   help:'Split by total percentage interest, without regard to what has accrued.'},
+  {value:'capital-return',label:'Return of capital',
+   help:'Pro rata by the capital still outstanding on each certificate.'},
+];
+
+// What a distribution of `amountCents` would give each holder, under a basis.
+// Returns rows the form can show and the user can override before anything is
+// written — the same discipline as the suggestion strip.
+function proposeDistribution(offeringId,amountCents,basis,asOf){
+  const r=computeCertificates(offeringId,asOf);
+  const live=r.certificates.filter(c=>!c.cancelled_date);
+  const rows=live.map(c=>({
+    certificate_id:c.id,investor_id:c.investor_id??null,
+    holder:c.holder_name||'—',cert_number:c.cert_number,class_name:c.class_name,
+    owed:c.accrued_outstanding||0,
+    capitalLeft:Math.max(0,(c.capital_cents||0)-(c.capital_returned_cents||0)),
+    ownership:Number(c.total_pct_shown)||0,
+    pref_cents:0,capital_cents:0}));
+  const amount=Math.max(0,Number(amountCents)||0);
+  if(!amount||!rows.length)return{rows,basis,allocated:0,unallocated:amount};
+
+  if(basis==='pro-rata'){
+    allocateCents(amount,rows.map(r2=>r2.ownership)).forEach((v,i)=>{rows[i].capital_cents=v;});
+  }else if(basis==='capital-return'){
+    allocateCents(amount,rows.map(r2=>r2.capitalLeft)).forEach((v,i)=>{rows[i].capital_cents=v;});
+  }else{
+    // Preferred first. Where the money does not cover what is owed it is
+    // split in proportion to what is owed — never rounded up to satisfy one
+    // holder and leave another short.
+    const owedTotal=rows.reduce((a,r2)=>a+r2.owed,0);
+    const toPref=Math.min(amount,owedTotal);
+    if(toPref>0)allocateCents(toPref,rows.map(r2=>r2.owed)).forEach((v,i)=>{rows[i].pref_cents=v;});
+    const rest=amount-toPref;
+    if(rest>0)allocateCents(rest,rows.map(r2=>r2.ownership)).forEach((v,i)=>{rows[i].capital_cents=v;});
+  }
+  const allocated=rows.reduce((a,r2)=>a+r2.pref_cents+r2.capital_cents,0);
+  return{rows,basis,allocated,unallocated:amount-allocated};
+}
+
+/* ---- The chain of title --------------------------------------------------
+   A certificate could be created or deleted and nothing else, so the cap
+   table could only ever describe the original issuance and drifted out of
+   date from the first secondary transfer onward. A transfer now cancels the
+   certificate it came from and issues a successor that points back at it;
+   deleting the transfer puts both back. Nothing is rewritten in place — a
+   muniment of title that quietly changes hands is not evidence of anything. */
+function certificateChain(certId){
+  const out=[];
+  let id=Number(certId);
+  const guard=new Set();
+  while(id&&!guard.has(id)){
+    guard.add(id);
+    const c=db.certificates.find(x=>x.id===id);
+    if(!c)break;
+    out.unshift(c);
+    const t=db.transfers.find(x=>x.to_certificate_id===c.id);
+    id=t?t.from_certificate_id:null;
+  }
+  return out;
+}
+const TRANSFER_KINDS=[
+  {value:'transfer',label:'Transfer / assignment',help:'The holding passes to another holder. A successor certificate is issued.'},
+  {value:'redemption',label:'Redemption',help:'The holding is bought back and leaves the cap table. No successor is issued.'},
+];
+
+/* ---- Staged funding ------------------------------------------------------
+   For a fund that draws down over years, committed and funded are different
+   numbers for most of the file's life. An offering says whether it funds in
+   one payment or in calls; where it calls, what a subscriber owes today is
+   what has been called of them, not what they promised in total. */
+function callsFor(offeringId,subscriptionId,asOf){
+  const cut=asOf||todayISO();
+  let called=0;
+  for(const c of db.capital_calls.filter(x=>x.offering_id===Number(offeringId))){
+    if(c.call_date&&c.call_date>cut)continue;
+    for(const a of(c.allocations||[]))
+      if(a.subscription_id===Number(subscriptionId))called+=Number(a.amount_cents)||0;
+  }
+  return called;
+}
+// What a call of `percent` of each commitment would come to, per subscriber.
+function proposeCall(offeringId,percent){
+  offeringId=Number(offeringId);
+  const pct=Math.max(0,Number(percent)||0);
+  return db.subscriptions.filter(s=>s.offering_id===offeringId&&s.status!=='Withdrawn')
+    .map(s=>{const inv=db.investors.find(i=>i.id===s.investor_id);
+      const commitment=s.amount_committed_cents||0;
+      const already=callsFor(offeringId,s.id);
+      return{subscription_id:s.id,investor_id:s.investor_id,
+        holder:inv?investorDisplayName(inv):'—',
+        commitment,already,
+        // Never call more than was committed, however the percentages add up.
+        amount_cents:Math.max(0,Math.min(commitment-already,Math.round(commitment*pct/100)))};});
 }
 
 /* ---- Making a percentage column add up -----------------------------------
@@ -2684,10 +2816,17 @@ function investorEscrow(offeringId,investorId,subscriptionId){
 }
 // What a subscriber owes: the investment, plus pass-through costs where the
 // offering charges them.
-function subscriptionDue(sub,offering){
+function subscriptionDue(sub,offering,asOf){
   const o=offering||db.offerings.find(x=>x.id===sub.offering_id)||{};
-  return(sub.amount_committed_cents||0)+(o.pass_through_costs?(sub.costs_cents||0):0);
+  // Where the offering funds in stages, what is owed today is what has been
+  // called, not what was promised in total. Everything else is unchanged.
+  const principal=o.staged_funding
+    ? callsFor(o.id,sub.id,asOf)
+    : (sub.amount_committed_cents||0);
+  return principal+(o.pass_through_costs?(sub.costs_cents||0):0);
 }
+// What has been committed, whatever has been called of it.
+function subscriptionCommitment(sub){return sub.amount_committed_cents||0;}
 // Status is a label over four facts. A human only ever chooses 'Withdrawn'.
 function derivedSubStatus(s){
   if(!s)return'Prospect';
@@ -2836,6 +2975,8 @@ function offeringFromBody(b){
     // form and the closing that issues them.
     cert_number_format:{prefix:str(b.cert_prefix)||'',pad:Math.max(1,Math.min(8,numOr(b.cert_pad,1)||1))},
     accrual_convention:str(b.accrual_convention)||null,
+    // Funds in one payment, or over a series of calls.
+    staged_funding:b.staged_funding?1:0,
     // Rule 506(d): recorded because its absence from the file is the awkward
     // part, not its presence.
     bad_actor_checked_date:str(b.bad_actor_checked_date),
@@ -3151,6 +3292,204 @@ const api={
       checklist_template:Array.isArray(b.checklist_template)?b.checklist_template:cur.checklist_template};
     db.settings={...db.settings,...row};await persist();return settings();},
 
+  /* ---- Distributions ------------------------------------------------------
+     Money paid out to holders after a closing. Nothing here touches escrow:
+     escrow is where money sits before a closing, and this is all after one. */
+  async listDistributions(offeringId){offeringId=Number(offeringId);
+    const rows=db.distributions.filter(d=>d.offering_id===offeringId)
+      .sort((a,b)=>String(b.pay_date||'').localeCompare(String(a.pay_date||''))||b.id-a.id);
+    const total=rows.reduce((a,d)=>a+(d.amount_cents||0),0);
+    const pref=rows.reduce((a,d)=>a+(d.allocations||[]).reduce((n,x)=>n+(x.pref_cents||0),0),0);
+    const capital=rows.reduce((a,d)=>a+(d.allocations||[]).reduce((n,x)=>n+(x.capital_cents||0),0),0);
+    return{distributions:rows.map(d=>({...d,
+      allocations:(d.allocations||[]).map(a=>{
+        const c=db.certificates.find(x=>x.id===a.certificate_id);
+        const i=db.investors.find(x=>x.id===a.investor_id);
+        return{...a,cert_number:c?c.cert_number:null,
+          holder:i?investorDisplayName(i):(c&&c.holder_name)||'—'};})})),
+      total,pref,capital};},
+  async createDistribution(offeringId,b){offeringId=Number(offeringId);
+    if(!db.offerings.find(x=>x.id===offeringId))throw new Error('Offering not found');
+    const amount=Math.abs(dollarsToCents(b.amount)||0);
+    if(!amount)throw new Error('Enter the amount being distributed.');
+    const allocations=(Array.isArray(b.allocations)?b.allocations:[])
+      .map(a=>({certificate_id:Number(a.certificate_id),investor_id:a.investor_id==null?null:Number(a.investor_id),
+        pref_cents:Math.max(0,Number(a.pref_cents)||0),capital_cents:Math.max(0,Number(a.capital_cents)||0)}))
+      .filter(a=>a.pref_cents||a.capital_cents);
+    const allocated=allocations.reduce((n,a)=>n+a.pref_cents+a.capital_cents,0);
+    // A distribution whose parts do not come to the cheque is a distribution
+    // somebody has to explain. Refuse it rather than record it.
+    if(allocated!==amount)
+      throw new Error(`The allocations come to ${money(allocated)} against ${money(amount)} distributed. They must agree before this can be recorded.`);
+    const row={id:nextId('distributions'),offering_id:offeringId,
+      label:str(b.label)||`Distribution ${db.distributions.filter(d=>d.offering_id===offeringId).length+1}`,
+      pay_date:str(b.pay_date)||todayISO(),amount_cents:amount,basis:str(b.basis)||'pref-first',
+      method:str(b.method),reference:str(b.reference),notes:str(b.notes),
+      allocations,created_at:nowISO()};
+    db.distributions.push(row);await persist();return row;},
+  async deleteDistribution(id){id=Number(id);
+    db.distributions=db.distributions.filter(d=>d.id!==id);await persist();return{ok:true};},
+  proposeDistribution(offeringId,amountCents,basis,asOf){
+    return proposeDistribution(Number(offeringId),amountCents,basis,asOf);},
+
+  /* ---- Transfers and redemptions ------------------------------------------
+     The chain of title. A certificate is never rewritten in place: it is
+     cancelled, and a successor is issued pointing back at it. */
+  async listTransfers(offeringId){offeringId=Number(offeringId);
+    return db.transfers.filter(t=>t.offering_id===offeringId)
+      .sort((a,b)=>String(b.transfer_date||'').localeCompare(String(a.transfer_date||''))||b.id-a.id)
+      .map(t=>{
+        const from=db.certificates.find(c=>c.id===t.from_certificate_id);
+        const to=db.certificates.find(c=>c.id===t.to_certificate_id);
+        const holder=c=>{if(!c)return null;const i=db.investors.find(x=>x.id===c.investor_id);
+          return i?investorDisplayName(i):(c.holder_name||'—');};
+        return{...t,from_number:from?from.cert_number:null,to_number:to?to.cert_number:null,
+          from_holder:holder(from),to_holder:holder(to)};});},
+  async createTransfer(offeringId,b){offeringId=Number(offeringId);
+    const o=db.offerings.find(x=>x.id===offeringId);
+    if(!o)throw new Error('Offering not found');
+    const from=db.certificates.find(c=>c.id===Number(b.from_certificate_id)&&c.offering_id===offeringId);
+    if(!from)throw new Error('Pick the certificate being transferred.');
+    if(from.cancelled_date)throw new Error(`Certificate ${from.cert_number} has already been transferred or redeemed.`);
+    const kind=b.kind==='redemption'?'redemption':'transfer';
+    const date=str(b.transfer_date)||todayISO();
+    const whole=b.whole!==false;
+    const capital=from.capital_cents||0;
+    const moving=whole?capital:Math.min(capital,Math.abs(dollarsToCents(b.capital)||0));
+    if(!whole&&!moving)throw new Error('Enter how much capital is moving.');
+    if(kind==='transfer'&&!b.to_investor_id&&!str(b.to_holder_name))
+      throw new Error('Say who it is transferring to.');
+    const transfer={id:nextId('transfers'),offering_id:offeringId,kind,
+      from_certificate_id:from.id,to_certificate_id:null,
+      to_investor_id:numOr(b.to_investor_id),to_holder_name:str(b.to_holder_name),
+      transfer_date:date,capital_cents:moving,whole:whole?1:0,
+      consideration_cents:dollarsToCents(b.consideration),
+      notes:str(b.notes),created_at:nowISO()};
+
+    if(whole){
+      // The whole holding moves: the certificate is cancelled outright.
+      from.cancelled_date=date;
+      from.cancelled_by_transfer_id=transfer.id;
+    }else{
+      // Part of it moves: what is left stays on the original certificate.
+      from.capital_cents=capital-moving;
+    }
+    if(kind==='transfer'){
+      const maxSort=db.certificates.filter(c=>c.offering_id===offeringId)
+        .reduce((m,c)=>Math.max(m,c.sort_index||0),0);
+      const successor={id:nextId('certificates'),offering_id:offeringId,
+        subscription_id:from.subscription_id??null,closing_id:from.closing_id??null,
+        investor_id:numOr(b.to_investor_id),holder_name:str(b.to_holder_name),
+        class_name:from.class_name,capital_cents:moving,
+        pct_of_class:null,percent_interest:null,
+        pref_return_rate:from.pref_return_rate,accrued_cents:null,
+        // The successor takes the transferor's accrual start and convention:
+        // a transfer moves a holding, it does not restart one.
+        accrual_convention:from.accrual_convention||null,
+        accrual_start:from.accrual_start||from.issue_date||null,
+        funded_date:from.funded_date||null,
+        issue_date:date,issued_by_transfer_date:date,
+        cert_number:nextCertNumber(offeringId),sort_index:maxSort+1,
+        no_capital:from.no_capital?1:0,
+        transferred_from_certificate_id:from.id,
+        notes:`Issued on the ${whole?'transfer':'part transfer'} of certificate ${from.cert_number}.`,
+        created_at:nowISO()};
+      db.certificates.push(successor);
+      transfer.to_certificate_id=successor.id;
+    }
+    db.transfers.push(transfer);await persist();return transfer;},
+  async deleteTransfer(id){id=Number(id);
+    const t=db.transfers.find(x=>x.id===id);
+    if(!t)throw new Error('Transfer not found');
+    const from=db.certificates.find(c=>c.id===t.from_certificate_id);
+    if(from){
+      if(t.whole){from.cancelled_date=null;from.cancelled_by_transfer_id=null;}
+      // A part transfer took capital off the original; give it back.
+      else from.capital_cents=(from.capital_cents||0)+(t.capital_cents||0);
+    }
+    if(t.to_certificate_id)db.certificates=db.certificates.filter(c=>c.id!==t.to_certificate_id);
+    db.transfers=db.transfers.filter(x=>x.id!==id);
+    await persist();return{ok:true};},
+
+  /* ---- Capital calls ------------------------------------------------------ */
+  async listCapitalCalls(offeringId){offeringId=Number(offeringId);
+    const calls=db.capital_calls.filter(c=>c.offering_id===offeringId)
+      .sort((a,b)=>String(a.call_date||'').localeCompare(String(b.call_date||''))||a.id-b.id);
+    return{calls:calls.map(c=>({...c,
+      called:(c.allocations||[]).reduce((a,x)=>a+(x.amount_cents||0),0),
+      allocations:(c.allocations||[]).map(a=>{
+        const i=db.investors.find(x=>x.id===a.investor_id);
+        return{...a,holder:i?investorDisplayName(i):'—'};})})),
+      committed:db.subscriptions.filter(s=>s.offering_id===offeringId&&s.status!=='Withdrawn')
+        .reduce((a,s)=>a+(s.amount_committed_cents||0),0)};},
+  proposeCall(offeringId,percent){return proposeCall(offeringId,percent);},
+  async createCapitalCall(offeringId,b){offeringId=Number(offeringId);
+    if(!db.offerings.find(x=>x.id===offeringId))throw new Error('Offering not found');
+    const allocations=(Array.isArray(b.allocations)?b.allocations:[])
+      .map(a=>({subscription_id:Number(a.subscription_id),investor_id:a.investor_id==null?null:Number(a.investor_id),
+        amount_cents:Math.max(0,Number(a.amount_cents)||0)}))
+      .filter(a=>a.amount_cents);
+    if(!allocations.length)throw new Error('This call asks nobody for anything.');
+    const row={id:nextId('capital_calls'),offering_id:offeringId,
+      label:str(b.label)||`Call ${db.capital_calls.filter(c=>c.offering_id===offeringId).length+1}`,
+      call_date:str(b.call_date)||todayISO(),due_date:str(b.due_date),
+      percent:numOr(b.percent),notes:str(b.notes),allocations,created_at:nowISO()};
+    db.capital_calls.push(row);await persist();return row;},
+  async deleteCapitalCall(id){id=Number(id);
+    db.capital_calls=db.capital_calls.filter(c=>c.id!==id);await persist();return{ok:true};},
+
+  /* ---- The offering that did not reach its minimum ------------------------
+     Both facts needed for the escrow break were already tracked. What came
+     next was a long stretch of manual ledger entry, undertaken at the one
+     moment when everybody involved is under pressure and least able to check
+     the arithmetic. This proposes the whole reversal, itemised, and writes
+     nothing until it is accepted. */
+  proposeBreak(offeringId){
+    offeringId=Number(offeringId);
+    const o=db.offerings.find(x=>x.id===offeringId);
+    if(!o)throw new Error('Offering not found');
+    const s=offeringSummary(o);
+    const subs=db.subscriptions.filter(x=>x.offering_id===offeringId&&x.status!=='Withdrawn');
+    const refunds=[];
+    for(const sub of subs){
+      const e=investorEscrow(offeringId,sub.investor_id,sub.id);
+      const held=e.clearedNet;
+      if(held>0){const inv=db.investors.find(i=>i.id===sub.investor_id);
+        refunds.push({subscription_id:sub.id,investor_id:sub.investor_id,
+          holder:inv?investorDisplayName(inv):'—',amount_cents:held});}
+    }
+    return{offering:o,
+      minRaise:o.target_min_cents,cleared:s.escrow.clearedNetDeposits,
+      minRaiseMet:s.minRaiseMet,deadline:o.final_close_date,
+      daysPastDeadline:o.final_close_date?-daysUntil(o.final_close_date):null,
+      refunds,
+      totalRefund:refunds.reduce((a,r)=>a+r.amount_cents,0),
+      subscriptions:subs.length,
+      // Closings already held mean money has left escrow to the issuer. That
+      // is not a break, and this is not the tool for it.
+      closingsHeld:db.closings.filter(c=>c.offering_id===offeringId).length};},
+  async breakOffering(offeringId,b){offeringId=Number(offeringId);
+    const o=db.offerings.find(x=>x.id===offeringId);
+    if(!o)throw new Error('Offering not found');
+    const plan=api.proposeBreak(offeringId);
+    if(plan.closingsHeld)throw new Error('This offering has already held a closing, so funds have left escrow. Undo the closing first if it should not stand.');
+    const date=str(b&&b.refund_date)||todayISO();
+    for(const r of plan.refunds){
+      db.escrow.push({id:nextId('escrow'),offering_id:offeringId,investor_id:r.investor_id,
+        subscription_id:r.subscription_id,txn_type:'refund',amount_cents:r.amount_cents,
+        txn_date:date,method:null,reference:str(b&&b.reference)||null,cleared:1,
+        notes:'Refunded — the minimum raise was not met.',source:'break',created_at:nowISO()});
+      const sub=db.subscriptions.find(x=>x.id===r.subscription_id);
+      if(sub){sub.status='Withdrawn';sub.updated_at=nowISO();}
+    }
+    // Subscribers who never funded are withdrawn too: the offering is over.
+    for(const sub of db.subscriptions.filter(x=>x.offering_id===offeringId&&x.status!=='Withdrawn')){
+      sub.status='Withdrawn';sub.updated_at=nowISO();
+    }
+    o.status='Terminated';o.updated_at=nowISO();
+    await persist();
+    return{refunded:plan.refunds.length,total:plan.totalRefund};},
+
   /* ---- Filings ------------------------------------------------------------
      Form D's position is computed rather than stored; the state notices are
      rows, because each one has its own date, fee and confirmation number. */
@@ -3325,6 +3664,20 @@ const AUDIT={
   deleteCertificate:id=>{const c=db.certificates.find(x=>x.id===Number(id));
     return[`Deleted certificate ${c?c.cert_number:''}`,c?c.offering_id:null];},
   renumberCertificates:offId=>[`Renumbered the certificates on “${oNameOf(offId)}”`,Number(offId)],
+  breakOffering:offId=>{const p=api.proposeBreak(offId);
+    return[`Broke escrow on “${oNameOf(offId)}” — ${p.refunds.length} refund${p.refunds.length===1?'':'s'} totalling ${money(p.totalRefund)}, every subscription withdrawn, the offering terminated`,Number(offId)];},
+
+  createDistribution:(offId,b)=>[`Recorded a distribution of ${money(dollarsToCents(b.amount))} on “${oNameOf(offId)}”`,Number(offId)],
+  deleteDistribution:id=>{const d=db.distributions.find(x=>x.id===Number(id));
+    return[`Deleted the distribution “${d?d.label:''}”`,d?d.offering_id:null];},
+  createTransfer:(offId,b)=>{const c=db.certificates.find(x=>x.id===Number(b.from_certificate_id));
+    return[`${b.kind==='redemption'?'Redeemed':'Transferred'} certificate ${c?c.cert_number:''}`,Number(offId)];},
+  deleteTransfer:id=>{const t=db.transfers.find(x=>x.id===Number(id));
+    const c=t&&db.certificates.find(x=>x.id===t.from_certificate_id);
+    return[`Undid the ${t&&t.kind==='redemption'?'redemption':'transfer'} of certificate ${c?c.cert_number:''}`,t?t.offering_id:null];},
+  createCapitalCall:(offId,b)=>[`Issued a capital call on “${oNameOf(offId)}”`,Number(offId)],
+  deleteCapitalCall:id=>{const c=db.capital_calls.find(x=>x.id===Number(id));
+    return[`Deleted the capital call “${c?c.label:''}”`,c?c.offering_id:null];},
 
   saveStateFiling:(offId,b,id)=>[`${id?'Edited':'Recorded'} the ${stateName((str(b.state)||'').toUpperCase())} notice filing`,Number(offId)],
   deleteStateFiling:id=>{const f=db.state_filings.find(x=>x.id===Number(id));
@@ -3337,6 +3690,9 @@ const AUDIT={
 };
 // acceptSuggestion / dismissSuggestion write their own, richer entries; the
 // rest are reads. Named so the wrapper's completeness check stays honest.
+// breakOffering reverses a whole offering; it is wrapped by name rather than
+// by prefix, since "break" is not one of the verbs the loop looks for.
+const AUDIT_EXTRA=new Set(['breakOffering']);
 const AUDIT_EXEMPT=new Set(['acceptSuggestion','dismissSuggestion','restoreDismissed','unlockWithPassphrase','setPassphrase','clearPassphrase']);
 
 // Actions the trail should carry but which do not pass through a single API
@@ -3346,7 +3702,7 @@ function logChange(summary,offeringId){logActivity('changed',summary,offeringId?
 for(const name of Object.keys(api)){
   const fn=api[name];
   if(typeof fn!=='function')continue;
-  if(!/^(create|update|delete|save|renumber|issue|record|cancel|reverse|refund)/.test(name))continue;
+  if(!/^(create|update|delete|save|renumber|issue|record|cancel|reverse|refund)/.test(name)&&!AUDIT_EXTRA.has(name))continue;
   if(AUDIT_EXEMPT.has(name))continue;
   const describe=AUDIT[name];
   api[name]=async function(...args){
@@ -3758,6 +4114,19 @@ function computeSuggestions(offeringId){
         `The deadline was ${fmtDate(o.final_close_date)} and the offering is still ${o.status}. Either extend the deadline or move the offering on.`,
         relDays(days),null,'warn'));
     }
+    // The deadline passed and the minimum was never reached. This is the one
+    // suggestion that proposes an ending rather than a correction, so it
+    // carries no `apply` — it points at the screen that itemises it first.
+    if(days!==null&&days<0&&o.target_min_cents&&!['Closed','Terminated'].includes(o.status)
+       &&!db.closings.some(c=>c.offering_id===o.id)){
+      const sum=offeringSummary(o);
+      if(!sum.minRaiseMet){
+        out.push(sugg(`break-escrow:${o.id}:${o.final_close_date}`,o.id,
+          `${o.name} closed short of its minimum`,
+          `${money(sum.escrow.clearedNetDeposits)} cleared against a ${money(o.target_min_cents)} minimum, and the deadline was ${fmtDate(o.final_close_date)}. Either the deadline moves, or escrow breaks: the Closings tab will itemise the refunds before writing any of them.`,
+          `${money(o.target_min_cents-sum.escrow.clearedNetDeposits)} short`,null,'warn'));
+      }
+    }
     if(o.status==='Drafting'&&(subs.length||es.deposits)){
       out.push(sugg(`status-open:${o.id}`,o.id,`Move ${o.name} to Open`,
         'The offering is still marked Drafting although subscribers and escrow activity are on record.',
@@ -3924,6 +4293,7 @@ function openOfferingForm(existing,onDone){
       escrow_account_number:existing.escrow_account_number,notes:existing.notes,
       default_return_rate:existing.default_return_rate??'',pass_through_costs:existing.pass_through_costs,costs_label:existing.costs_label,
       no_max:existing.no_max,fractional_allowed:existing.fractional_allowed,no_deadline:existing.no_deadline,
+      staged_funding:existing.staged_funding,
       issuer_party_id:existing.issuer_party_id,escrow_party_id:existing.escrow_party_id,
       cert_prefix:(existing.cert_number_format&&existing.cert_number_format.prefix)||'',
       cert_pad:(existing.cert_number_format&&existing.cert_number_format.pad)||1,
@@ -3948,6 +4318,8 @@ function openOfferingForm(existing,onDone){
       {name:'min_investment',label:'Minimum investment',type:'money',half:true},
       {name:'default_return_rate',label:'Preferred return / interest rate (%)',type:'number',step:'any',half:true,help:'Default rate for certificates; accrues from the closing date.'},
       {name:'fractional_allowed',label:'Allow fractional investments / units (minimum may be waived)',type:'checkbox'},
+      {name:'staged_funding',label:'Funds in stages — capital is drawn down by call',type:'checkbox',
+        help:'What a subscriber owes becomes what has been called of them, rather than the whole commitment. A Capital calls panel appears on the Investors tab.'},
       {name:'pass_through_costs',label:'Pass legal / professional costs through to investors',type:'checkbox',help:'Adds a cost field to each subscription, charged on top of the investment.'},
       {name:'costs_label',label:'Label for the pass-through cost',half:true,placeholder:'e.g. Legal & professional fees',showIf:v=>!!v.pass_through_costs},
       {name:'launch_date',label:'Launch date',type:'date',half:true},
@@ -4202,7 +4574,7 @@ function offeringCard(o){
       days!==null&&!['Closed','Terminated'].includes(o.status)?el('span',{class:days<=14&&days>=0?'urgent-text':''},`Close ${relDays(days)}`):el('span',{},o.no_deadline?'Open-ended':fmtDate(o.final_close_date))));
 }
 
-const TABS=['Overview','Tranches','Investors','Escrow','Closings','Certificates','Filings','Checklist','Reconciliation'];
+const TABS=['Overview','Tranches','Investors','Escrow','Closings','Certificates','Distributions','Filings','Checklist','Reconciliation'];
 async function renderOffering(id){
   const[offering,investors]=await Promise.all([api.getOffering(id),api.listInvestors()]);
   const state={offering,investors,tab:currentTab()};
@@ -4225,7 +4597,8 @@ async function renderOffering(id){
     const render={Overview:()=>overviewTab(state),Tranches:()=>tranchesTab(state,drawTab,reloadOffering),
       Investors:()=>investorsTab(state,drawTab,reloadOffering),
       Escrow:()=>escrowTab(state,drawTab,reloadOffering),Closings:()=>closingsTab(state,drawTab,reloadOffering),
-      Certificates:()=>certificatesTab(state),
+      Certificates:()=>certificatesTab(state,drawTab,reloadOffering),
+      Distributions:()=>distributionsTab(state,drawTab,reloadOffering),
       Filings:()=>filingsTab(state,drawTab,reloadOffering),
       Checklist:()=>checklistTab(state),Reconciliation:()=>reconciliationTab(state)}[state.tab];
     const node=await render();clear(tabContent);tabContent.appendChild(node);}
@@ -4348,6 +4721,8 @@ function openTrancheForm(offering,existing,onDone){
 async function investorsTab(state,drawTab,reloadOffering){
   const offering=state.offering;
   const subs=await api.listSubscriptions(offering.id);
+  const calls=offering.staged_funding?await api.listCapitalCalls(offering.id):null;
+  const refreshTab=async()=>{await reloadOffering();drawTab();};
   const tranches=Array.isArray(offering.tranches)?offering.tranches:[];
   const trancheName=id=>{const t=tranches.find(x=>x.id===id);return t?t.name:null;};
   // Withdrawn rows stay on the roster and out of the figures.
@@ -4362,7 +4737,9 @@ async function investorsTab(state,drawTab,reloadOffering){
     el('span',{},el('strong',{},money(received)),' received'),
     showCosts?el('span',{},el('strong',{},money(costs)),' costs'):null,
     showCosts?el('span',{},el('strong',{},money(committed+costs)),' total due'):null);
-  return el('div',{},el('div',{class:'section-head'},el('div',{},el('h2',{},'Investors'),figures),addBtn),
+  return el('div',{},
+    calls?capitalCallsPanel(offering,calls,refreshTab):null,
+    el('div',{class:'section-head'},el('div',{},el('h2',{},'Investors'),figures),addBtn),
     !subs.length?emptyState('No investors on this offering yet.',state.investors.length?null:el('a',{class:'btn btn-ghost',onclick:()=>navigate('/investors')},'Add investors to your contact book first')):
     dataTable([
       {label:'Investor',primary:true,render:s=>[
@@ -4449,6 +4826,363 @@ async function checklistTab(state){
   return el('section',{class:'panel'},el('div',{class:'section-head'},el('h2',{},'Process checklist'),countLabel),list,
     el('div',{class:'add-task-row'},newInput,dueInput,el('button',{class:'btn btn-primary btn-sm',onclick:addTask},'Add step')));
 }
+/* ---- Distributions -------------------------------------------------------
+   The certificate roster already computed, per holder, the percentage of the
+   company and the preferred return accrued. That is exactly what a
+   distribution needs, and nothing was using it — so the accrued figure only
+   ever grew, and read as a running total of what had never been settled. */
+async function distributionsTab(state,drawTab,reloadOffering){
+  const o=state.offering;
+  const[{distributions,total,pref,capital},certData]=await Promise.all([
+    api.listDistributions(o.id),api.listCertificates(o.id)]);
+  const live=certData.certificates.filter(c=>!c.cancelled_date);
+  const owed=certData.totalOutstanding;
+  const addBtn=el('button',{class:'btn btn-primary',disabled:!live.length,
+    onclick:()=>openDistributionForm(o,async()=>{await reloadOffering();drawTab();})},'@icon:plus','Record a distribution');
+
+  return el('div',{},
+    el('div',{class:'stat-row'},
+      statCard('Distributed to date',money(total),{kind:'accent',sub:`${distributions.length} distribution${distributions.length===1?'':'s'}`}),
+      statCard('Paid as preferred return',money(pref)),
+      statCard('Paid as capital',money(capital)),
+      statCard('Preferred return outstanding',money(owed),{kind:owed?'warn':undefined,sub:'across live certificates'})),
+    el('div',{class:'section-head'},el('h2',{},'Distributions'),addBtn),
+    el('p',{class:'field-help',style:'margin:-6px 0 16px'},
+      'Money paid out to holders after a closing. Escrow is untouched by these — escrow holds subscriber funds before a closing, and a distribution comes after one. What is paid against the preferred return reduces what the certificate roster shows as still owed.'),
+    !live.length?emptyState('No live certificates to distribute to. Hold a closing first.'):
+    !distributions.length?emptyState('Nothing distributed yet.',
+      el('button',{class:'btn btn-primary',onclick:()=>openDistributionForm(o,async()=>{await reloadOffering();drawTab();})},'Record the first distribution')):
+    el('div',{},...distributions.map(d=>el('section',{class:'panel',style:'margin-bottom:16px'},
+      el('div',{class:'oc-head'},
+        el('div',{},el('h3',{class:'oc-name'},d.label),
+          el('div',{class:'oc-issuer'},`${fmtDateLong(d.pay_date)} · ${money(d.amount_cents)}`
+            +(d.method?` · ${d.method}`:'')+(d.reference?` · ${d.reference}`:''))),
+        el('div',{class:'row-actions'},
+          iconButton('trash',`Delete ${d.label}`,async()=>{
+            const ok=await confirmDialog(`Delete “${d.label}”? What it paid against the preferred return goes back to being outstanding.`,{danger:true,confirmLabel:'Delete'});
+            if(!ok)return;
+            await withUndo(`deleting the distribution “${d.label}”`,()=>api.deleteDistribution(d.id),`“${d.label}” deleted.`);
+            await reloadOffering();drawTab();},{danger:true}))),
+      dataTable([
+        {label:'Holder',primary:true,render:a=>[el('span',{},a.holder),
+          el('div',{class:'cell-sub'},'Certificate ',el('span',{class:'mono'},a.cert_number||'—'))]},
+        {label:'Preferred return',num:true,render:a=>a.pref_cents?money(a.pref_cents):'—'},
+        {label:'Capital',num:true,render:a=>a.capital_cents?money(a.capital_cents):'—'},
+        {label:'Total',num:true,render:a=>money((a.pref_cents||0)+(a.capital_cents||0))}
+      ],d.allocations,{caption:`What ${d.label} paid`,
+        foot:el('tr',{},el('td',{class:'rec-primary',dataset:{label:''}},'Total'),
+          el('td',{class:'num',dataset:{label:'Preferred return'}},money(d.allocations.reduce((a,x)=>a+(x.pref_cents||0),0))),
+          el('td',{class:'num',dataset:{label:'Capital'}},money(d.allocations.reduce((a,x)=>a+(x.capital_cents||0),0))),
+          el('td',{class:'num',dataset:{label:'Total'}},money(d.amount_cents)))}),
+      d.notes?el('div',{class:'notes-block'},el('p',{},d.notes)):null))));
+}
+
+function openDistributionForm(offering,onDone){
+  const amountInput=el('input',{type:'text',class:'inline-input money-input',placeholder:'0.00',inputmode:'decimal'});
+  const dateInput=el('input',{type:'date',class:'inline-input date',value:defaultDate()||todayISO()});
+  const labelInput=el('input',{type:'text',class:'inline-input grow',
+    placeholder:`Distribution ${db.distributions.filter(d=>d.offering_id===offering.id).length+1}`});
+  const basisSelect=el('select',{class:'inline-input'},
+    ...DISTRIBUTION_BASES.map(b=>el('option',{value:b.value},b.label)));
+  const methodInput=el('input',{type:'text',class:'inline-input',placeholder:'Wire, check…'});
+  const refInput=el('input',{type:'text',class:'inline-input',placeholder:'Reference'});
+  const notesInput=el('input',{type:'text',class:'inline-input grow',placeholder:'Notes (optional)'});
+  const basisHelp=el('p',{class:'field-help',style:'margin:6px 0 0'});
+  const tableWrap=el('div',{});
+  const errorBox=el('div',{class:'form-error',style:'display:none'});
+  // The proposal is a starting point, not an answer: every cell is editable,
+  // and nothing is written until the parts come to the whole.
+  let rows=[];
+  function recompute({keepEdits=false}={}){
+    const amount=Math.abs(dollarsToCents(amountInput.value)||0);
+    const basis=basisSelect.value;
+    basisHelp.textContent=(DISTRIBUTION_BASES.find(b=>b.value===basis)||{}).help||'';
+    if(!keepEdits){
+      const p=proposeDistribution(offering.id,amount,basis,dateInput.value||todayISO());
+      rows=p.rows;
+    }
+    draw(amount);
+  }
+  // The table is rebuilt when the amount or the basis changes, and only then.
+  // Editing a cell updates that row's total and the banner in place — a table
+  // that redraws under the cursor loses focus on the way to the next field.
+  const totalCells=new Map();
+  const bannerWrap=el('div',{});
+  function updateTotals(amount){
+    for(const[r,node]of totalCells)node.textContent=money(r.pref_cents+r.capital_cents);
+    const allocated=rows.reduce((a,r)=>a+r.pref_cents+r.capital_cents,0);
+    const diff=amount-allocated;
+    clear(bannerWrap);
+    bannerWrap.appendChild(el('div',{class:'banner'+(diff?' banner-warn':'')},
+      el('div',{},
+        el('strong',{},money(allocated)),' allocated of ',el('strong',{},money(amount)),
+        diff?el('span',{},` — ${money(Math.abs(diff))} ${diff>0?'still to allocate':'over-allocated'}`)
+          :el('span',{},' — these agree.')),
+      diff&&amount?el('button',{class:'btn btn-sm',type:'button',onclick:()=>recompute()},'Recalculate'):null));
+  }
+  function draw(amount){
+    clear(tableWrap);totalCells.clear();
+    if(!rows.length){tableWrap.appendChild(emptyState('No live certificates on this offering.'));return;}
+    const cell=(r,key)=>el('input',{type:'text',class:'inline-input money-input',inputmode:'decimal',
+      value:centsToInput(r[key]),'aria-label':`${key==='pref_cents'?'Preferred return':'Capital'} for ${r.holder}`,
+      // Both, so a typed figure counts as it is typed and a pasted one counts
+      // when the field is left.
+      oninput:e=>{r[key]=Math.max(0,dollarsToCents(e.target.value)||0);updateTotals(amount);},
+      onchange:e=>{r[key]=Math.max(0,dollarsToCents(e.target.value)||0);updateTotals(amount);}});
+    tableWrap.appendChild(dataTable([
+      {label:'Holder',primary:true,render:r=>[el('span',{},r.holder),
+        el('div',{class:'cell-sub'},`Certificate ${r.cert_number} · ${fmtPct(r.ownership)} · ${money(r.owed)} owed`)]},
+      {label:'Preferred return',num:true,render:r=>cell(r,'pref_cents')},
+      {label:'Capital',num:true,render:r=>cell(r,'capital_cents')},
+      {label:'Total',num:true,render:r=>{const n=el('span',{},money(r.pref_cents+r.capital_cents));
+        totalCells.set(r,n);return n;}}
+    ],rows,{caption:'What each holder receives'}));
+    tableWrap.appendChild(bannerWrap);
+    updateTotals(amount);
+  }
+  amountInput.addEventListener('input',()=>recompute());
+  basisSelect.addEventListener('change',()=>recompute());
+  dateInput.addEventListener('change',()=>recompute());
+  recompute();
+
+  const submit=el('button',{class:'btn btn-primary',type:'submit'},'Record distribution');
+  const form=el('form',{class:'modal-body form-grid',onsubmit:async e=>{
+    e.preventDefault();errorBox.style.display='none';
+    submit.disabled=true;
+    try{
+      await api.createDistribution(offering.id,{
+        label:labelInput.value||null,pay_date:dateInput.value||null,amount:amountInput.value,
+        basis:basisSelect.value,method:methodInput.value||null,reference:refInput.value||null,
+        notes:notesInput.value||null,
+        allocations:rows.map(r=>({certificate_id:r.certificate_id,investor_id:r.investor_id,
+          pref_cents:r.pref_cents,capital_cents:r.capital_cents}))});
+      closeModal();toast('Distribution recorded.','success');onDone?.();
+    }catch(err){errorBox.textContent=err.message;errorBox.style.display='';submit.disabled=false;}
+  }},
+    errorBox,
+    el('div',{class:'form-row'},el('label',{},'Amount distributed'),
+      el('div',{class:'money-wrap'},el('span',{class:'money-prefix'},'$'),amountInput)),
+    el('div',{class:'form-row half'},el('label',{},'Pay date'),dateInput),
+    el('div',{class:'form-row half'},el('label',{},'Label'),labelInput),
+    el('div',{class:'form-row'},el('label',{},'Split'),basisSelect,basisHelp),
+    el('div',{class:'form-row half'},el('label',{},'Method'),methodInput),
+    el('div',{class:'form-row half'},el('label',{},'Reference'),refInput),
+    el('div',{class:'form-row'},tableWrap),
+    el('div',{class:'form-row'},el('label',{},'Notes'),notesInput),
+    el('div',{class:'modal-actions'},
+      el('button',{class:'btn btn-ghost',type:'button',onclick:closeModal},'Cancel'),
+      submit));
+  openShell('Record a distribution',form,{wide:true});
+  setTimeout(()=>amountInput.focus(),40);
+}
+
+/* ---- Transfers and redemptions ------------------------------------------- */
+function transfersPanel(offering,transfers,certificates,onDone){
+  const live=certificates.filter(c=>!c.cancelled_date);
+  const addBtn=el('button',{class:'btn btn-ghost btn-sm',disabled:!live.length,
+    onclick:()=>openTransferForm(offering,live,onDone)},'@icon:swap','Record a transfer');
+  return el('section',{class:'panel'},
+    el('div',{class:'section-head',style:'margin-top:0'},
+      el('div',{},el('h2',{},'Transfers and redemptions'),
+        el('div',{class:'section-figures'},el('span',{},'The chain of title. A certificate is cancelled and a successor issued; neither is rewritten.'))),
+      addBtn),
+    !transfers.length?emptyState('Nothing has changed hands.'):
+    dataTable([
+      {label:'Date',primary:true,render:t=>[el('span',{},fmtDate(t.transfer_date)),
+        el('div',{class:'cell-sub'},t.kind==='redemption'?'Redemption':(t.whole?'Whole holding':'Part of the holding'))]},
+      {label:'From',render:t=>[el('span',{},t.from_holder||'—'),
+        el('div',{class:'cell-sub'},'Certificate ',el('span',{class:'mono'},t.from_number||'—'))]},
+      {label:'To',render:t=>t.kind==='redemption'?pill('Redeemed','muted')
+        :[el('span',{},t.to_holder||'—'),
+          el('div',{class:'cell-sub'},'Certificate ',el('span',{class:'mono'},t.to_number||'—'))]},
+      {label:'Capital',num:true,render:t=>money(t.capital_cents)},
+      {label:'Consideration',num:true,hide:true,render:t=>t.consideration_cents!=null?money(t.consideration_cents):'—'},
+      {label:'',cls:'row-actions',render:t=>rowActions(
+        iconButton('trash','Undo this transfer',async()=>{
+          const ok=await confirmDialog(
+            t.kind==='redemption'
+              ?`Undo this redemption? Certificate ${t.from_number} goes back to being live.`
+              :`Undo this transfer? Certificate ${t.to_number} is removed and ${t.from_number} goes back to being live.`,
+            {danger:true,confirmLabel:'Undo it'});
+          if(!ok)return;
+          await withUndo('undoing a transfer',()=>api.deleteTransfer(t.id),'Transfer undone.');
+          onDone?.();},{danger:true}))}
+    ],transfers,{caption:'Transfers and redemptions'}));
+}
+function openTransferForm(offering,liveCerts,onDone){
+  const investors=db.investors.slice().sort((a,b)=>investorSortKey(a).localeCompare(investorSortKey(b)));
+  formModal({title:'Transfer or redemption',wide:true,submitLabel:'Record it',
+    values:{kind:'transfer',whole:true,transfer_date:defaultDate()||todayISO()},
+    fields:[
+      {name:'kind',label:'What is happening',type:'select',half:true,
+        options:TRANSFER_KINDS.map(k=>({value:k.value,label:k.label})),
+        help:'A transfer issues a successor certificate. A redemption does not — the holding leaves the cap table.'},
+      {name:'transfer_date',label:'Date',type:'date',half:true,
+        help:'The roster as at an earlier date still shows the old holder.'},
+      {name:'from_certificate_id',label:'Certificate',type:'select',required:true,
+        options:[{value:'',label:'— Pick the certificate —'},
+          ...liveCerts.map(c=>({value:c.id,
+            label:`${c.cert_number} — ${c.holder_name||'—'} · ${c.class_name||''} · ${money(c.capital_cents)}`}))]},
+      {name:'whole',label:'The whole holding',type:'checkbox',
+        help:'Clear this to move part of it. What is left stays on the original certificate.'},
+      {name:'capital',label:'Capital moving',type:'money',half:true,showIf:v=>!v.whole},
+      {name:'to_investor_id',label:'To',type:'custom',showIf:v=>v.kind!=='redemption',
+        build:val=>investorPicker(investors,val,{allowCreate:true}),
+        help:'Start typing. A name that matches nothing offers to create the contact.'},
+      {name:'to_holder_name',label:'Or a holder not in the contact book',half:true,
+        showIf:v=>v.kind!=='redemption'&&!v.to_investor_id},
+      {name:'consideration',label:'Consideration',type:'money',half:true,
+        help:'What was paid for it, where that is part of the record.'},
+      {name:'notes',label:'Notes',type:'textarea',rows:2}],
+    onSubmit:async v=>{await api.createTransfer(offering.id,v);
+      toast(v.kind==='redemption'?'Redemption recorded.':'Transfer recorded — a successor certificate has been issued.','success');
+      onDone?.();}});
+}
+
+/* ---- Capital calls -------------------------------------------------------- */
+function capitalCallsPanel(offering,data,onDone){
+  const{calls,committed}=data;
+  const calledTotal=calls.reduce((a,c)=>a+c.called,0);
+  const addBtn=el('button',{class:'btn btn-ghost btn-sm',
+    onclick:()=>openCapitalCallForm(offering,onDone)},'@icon:plus','Issue a call');
+  return el('section',{class:'panel'},
+    el('div',{class:'section-head',style:'margin-top:0'},
+      el('div',{},el('h2',{},'Capital calls'),
+        el('div',{class:'section-figures'},
+          el('span',{},el('strong',{},money(calledTotal)),' called'),
+          el('span',{},el('strong',{},money(committed)),' committed'),
+          el('span',{},el('strong',{},money(Math.max(0,committed-calledTotal))),' uncalled'))),
+      addBtn),
+    !calls.length?emptyState('Nothing called yet. Subscribers owe nothing until a call is issued.'):
+    dataTable([
+      {label:'Call',primary:true,render:c=>[el('span',{},c.label),
+        el('div',{class:'cell-sub'},`Called ${fmtDate(c.call_date)}`+(c.due_date?` · due ${fmtDate(c.due_date)}`:''))]},
+      {label:'Of commitment',num:true,render:c=>c.percent!=null?fmtRate(c.percent):'—'},
+      {label:'Subscribers',num:true,hide:true,render:c=>String(c.allocations.length)},
+      {label:'Called',num:true,render:c=>money(c.called)},
+      {label:'',cls:'row-actions',render:c=>rowActions(
+        iconButton('trash',`Delete ${c.label}`,async()=>{
+          const ok=await confirmDialog(`Delete “${c.label}”? What it called stops being owed.`,{danger:true,confirmLabel:'Delete'});
+          if(!ok)return;
+          await withUndo(`deleting the capital call “${c.label}”`,()=>api.deleteCapitalCall(c.id),`“${c.label}” deleted.`);
+          onDone?.();},{danger:true}))}
+    ],calls,{caption:'Capital calls'}));
+}
+function openCapitalCallForm(offering,onDone){
+  const pctInput=el('input',{type:'number',step:'any',class:'inline-input',placeholder:'e.g. 25'});
+  const labelInput=el('input',{type:'text',class:'inline-input grow',
+    placeholder:`Call ${db.capital_calls.filter(c=>c.offering_id===offering.id).length+1}`});
+  const callDate=el('input',{type:'date',class:'inline-input date',value:defaultDate()||todayISO()});
+  const dueDate=el('input',{type:'date',class:'inline-input date'});
+  const notesInput=el('input',{type:'text',class:'inline-input grow',placeholder:'Notes (optional)'});
+  const errorBox=el('div',{class:'form-error',style:'display:none'});
+  const tableWrap=el('div',{});
+  let rows=proposeCall(offering.id,0);
+  const totalCell=el('td',{class:'num',dataset:{label:'This call'}},money(0));
+  function updateCallTotal(){totalCell.textContent=money(rows.reduce((a,r)=>a+r.amount_cents,0));}
+  function recompute(){
+    rows=proposeCall(offering.id,pctInput.value);
+    clear(tableWrap);
+    if(!rows.length){tableWrap.appendChild(emptyState('No live subscribers on this offering.'));return;}
+    tableWrap.appendChild(dataTable([
+      {label:'Subscriber',primary:true,render:r=>[el('span',{},r.holder),
+        el('div',{class:'cell-sub'},`${money(r.commitment)} committed · ${money(r.already)} already called`)]},
+      {label:'This call',num:true,render:r=>el('input',{type:'text',class:'inline-input money-input',inputmode:'decimal',
+        value:centsToInput(r.amount_cents),'aria-label':`Amount called from ${r.holder}`,
+        // Updated in place rather than by redrawing: a table that rebuilds
+        // under the cursor loses focus on the way to the next subscriber.
+        oninput:e=>{r.amount_cents=Math.max(0,dollarsToCents(e.target.value)||0);updateCallTotal();},
+        onchange:e=>{r.amount_cents=Math.max(0,dollarsToCents(e.target.value)||0);updateCallTotal();}})},
+      {label:'Uncalled after',num:true,hide:true,render:r=>money(Math.max(0,r.commitment-r.already-r.amount_cents))}
+    ],rows,{caption:'What this call asks of each subscriber',
+      foot:el('tr',{},el('td',{class:'rec-primary',dataset:{label:''}},'Total called'),
+        totalCell,
+        el('td',{class:'rec-hide'},''))}));
+    updateCallTotal();
+  }
+  pctInput.addEventListener('input',()=>recompute());
+  recompute();
+  const submit=el('button',{class:'btn btn-primary',type:'submit'},'Issue call');
+  const form=el('form',{class:'modal-body form-grid',onsubmit:async e=>{
+    e.preventDefault();errorBox.style.display='none';submit.disabled=true;
+    try{
+      await api.createCapitalCall(offering.id,{label:labelInput.value||null,
+        call_date:callDate.value||null,due_date:dueDate.value||null,percent:pctInput.value||null,
+        notes:notesInput.value||null,
+        allocations:rows.map(r=>({subscription_id:r.subscription_id,investor_id:r.investor_id,amount_cents:r.amount_cents}))});
+      closeModal();toast('Capital call issued.','success');onDone?.();
+    }catch(err){errorBox.textContent=err.message;errorBox.style.display='';submit.disabled=false;}
+  }},
+    errorBox,
+    el('p',{class:'field-help'},'Enter a percentage of each commitment and adjust any line that differs. Nobody is ever called for more than they committed.'),
+    el('div',{class:'form-row half'},el('label',{},'Percentage of commitment'),pctInput),
+    el('div',{class:'form-row half'},el('label',{},'Label'),labelInput),
+    el('div',{class:'form-row half'},el('label',{},'Call date'),callDate),
+    el('div',{class:'form-row half'},el('label',{},'Payment due'),dueDate),
+    el('div',{class:'form-row'},tableWrap),
+    el('div',{class:'form-row'},el('label',{},'Notes'),notesInput),
+    el('div',{class:'modal-actions'},
+      el('button',{class:'btn btn-ghost',type:'button',onclick:closeModal},'Cancel'),
+      submit));
+  openShell('Issue a capital call',form,{wide:true});
+  setTimeout(()=>pctInput.focus(),40);
+}
+
+/* ---- Breaking escrow ------------------------------------------------------
+   The offering that did not reach its minimum by its deadline. Everything
+   needed is already on file; what was missing was any way to act on it that
+   was not forty manual ledger entries at the worst possible moment. */
+async function openBreakEscrow(offering,onDone){
+  const plan=api.proposeBreak(offering.id);
+  if(plan.closingsHeld){
+    toast('This offering has already held a closing, so funds have left escrow. Undo the closing first if it should not stand.','error');
+    return;
+  }
+  const dateInput=el('input',{type:'date',class:'inline-input date',value:defaultDate()||todayISO()});
+  const refInput=el('input',{type:'text',class:'inline-input grow',placeholder:'Reference for the refunds (optional)'});
+  const ack=el('input',{type:'checkbox'});
+  const errorBox=el('div',{class:'form-error',style:'display:none'});
+  const submit=el('button',{class:'btn btn-danger',type:'submit'},'Break escrow');
+  const form=el('form',{class:'modal-body form-grid',onsubmit:async e=>{
+    e.preventDefault();errorBox.style.display='none';
+    if(!ack.checked){errorBox.textContent='Confirm that this offering is being terminated.';errorBox.style.display='';return;}
+    submit.disabled=true;
+    try{
+      await withUndo(`breaking escrow on “${offering.name}”`,
+        ()=>api.breakOffering(offering.id,{refund_date:dateInput.value||null,reference:refInput.value||null}),
+        `Escrow broken — ${plan.refunds.length} refund${plan.refunds.length===1?'':'s'} recorded and the offering terminated.`);
+      closeModal();onDone?.();
+    }catch(err){errorBox.textContent=err.message;errorBox.style.display='';submit.disabled=false;}
+  }},
+    errorBox,
+    el('div',{class:`readiness-banner ${plan.minRaiseMet?'met':'short'}`},
+      el('div',{},
+        el('strong',{},plan.minRaiseMet
+          ?'The minimum raise has been met on this offering.'
+          :`${money(plan.cleared)} cleared against a ${money(plan.minRaise)} minimum.`),
+        el('div',{class:'readiness-detail'},plan.minRaiseMet
+          ?'Breaking escrow anyway will refund every subscriber and terminate the offering. That is rarely what is wanted here.'
+          :(plan.deadline
+            ?`The deadline was ${fmtDateLong(plan.deadline)}${plan.daysPastDeadline>0?`, ${plan.daysPastDeadline} days ago`:''}.`
+            :'This offering has no final close deadline recorded.')))),
+    el('p',{class:'field-help'},'This records a refund of everything each subscriber has cleared, withdraws every subscription, and terminates the offering. Nothing is written until you press the button, and it can be taken back straight afterwards.'),
+    plan.refunds.length?dataTable([
+      {label:'Subscriber',primary:true,render:r=>r.holder},
+      {label:'Refunded',num:true,render:r=>money(r.amount_cents)}
+    ],plan.refunds,{caption:'Refunds this will record',
+      foot:el('tr',{},el('td',{class:'rec-primary',dataset:{label:''}},`${plan.refunds.length} refund${plan.refunds.length===1?'':'s'}`),
+        el('td',{class:'num',dataset:{label:'Refunded'}},money(plan.totalRefund)))})
+      :el('p',{class:'muted-text'},'Nothing has cleared escrow, so there is nothing to refund. This will withdraw the subscriptions and terminate the offering.'),
+    el('div',{class:'form-row half'},el('label',{},'Refund date'),dateInput),
+    el('div',{class:'form-row half'},el('label',{},'Reference'),refInput),
+    el('label',{class:'ack-row'},ack,
+      el('span',{},`Terminate ${offering.name} and withdraw all ${plan.subscriptions} subscription${plan.subscriptions===1?'':'s'}.`)),
+    el('div',{class:'modal-actions'},
+      el('button',{class:'btn btn-ghost',type:'button',onclick:closeModal},'Cancel'),
+      submit));
+  openShell('Break escrow and terminate the offering',form,{wide:true});
+}
+
 /* ---- Filings -------------------------------------------------------------
    What has to be filed, when it was due, and what has actually gone in. The
    checklist used to carry one line for the whole of state practice. */
@@ -4607,14 +5341,30 @@ async function closingsTab(state,drawTab,reloadOffering){
 
   const addBtn=el('button',{class:'btn btn-primary',onclick:()=>openClosingForm(state.offering.id,openSubs,closings.length,
     async()=>{await reloadOffering();drawTab();})},'@icon:plus','Conduct a closing');
+  // The other ending. Offered only where it is the live question: money is
+  // held, nothing has closed, and the minimum has not been reached.
+  const o=state.offering;
+  const past=o.final_close_date?daysUntil(o.final_close_date)<0:false;
+  const canBreak=!closings.length&&!s.minRaiseMet&&o.target_min_cents&&
+    !['Terminated'].includes(o.status)&&(s.escrow.clearedBalance>0||subs.length>0);
+  const breakBtn=canBreak?el('button',{class:'btn btn-danger-ghost',
+    onclick:()=>openBreakEscrow(o,async()=>{await reloadOffering();drawTab();})},
+    'Break escrow…'):null;
 
   return el('div',{},
+    canBreak&&past?el('div',{class:'banner banner-warn'},
+      el('div',{},el('strong',{},`${o.name} passed its final close deadline on ${fmtDate(o.final_close_date)} `),
+        `with ${money(s.escrow.clearedNetDeposits)} cleared against a ${money(o.target_min_cents)} minimum. `,
+        'Breaking escrow refunds every subscriber and terminates the offering.'),
+      el('button',{class:'btn btn-sm btn-danger',onclick:()=>openBreakEscrow(o,async()=>{await reloadOffering();drawTab();})},
+        'Break escrow…')):null,
     el('div',{class:'stat-row'},
       statCard('Closings held',String(closings.length)),
       statCard('Total released to issuer',money(totalReleased),{kind:'accent'}),
       statCard('Cleared in escrow',money(s.escrow.clearedBalance),{sub:'remaining balance'}),
       statCard('Investors not yet closed',String(openSubs.length),{sub:`${subs.length} total`})),
-    el('div',{class:'section-head'},el('h2',{},'Closings'),addBtn),
+    el('div',{class:'section-head'},el('h2',{},'Closings'),
+      el('div',{style:'display:flex;gap:8px'},breakBtn,addBtn)),
     !closings.length
       ? emptyState('No closings recorded yet.',
           openSubs.length||s.escrow.clearedBalance?el('button',{class:'btn btn-primary',onclick:()=>openClosingForm(state.offering.id,openSubs,0,async()=>{await reloadOffering();drawTab();})},'Conduct the first closing'):null)
@@ -4746,13 +5496,15 @@ function openClosingForm(offeringId,openSubs,existingCount,onDone){
   setTimeout(()=>labelInput.focus(),50);
 }
 
-async function certificatesTab(state){
+async function certificatesTab(state,drawTab,reloadOffering){
   const offering=state.offering;
+  const refreshTab=async()=>{if(reloadOffering)await reloadOffering();(drawTab||refresh)();};
   // The date the roster speaks as at. Held on the tab state so it survives a
   // redraw, because "as at 30 June" is a question you ask more than once.
   if(!state.certAsOf)state.certAsOf=todayISO();
   const asOf=state.certAsOf;
-  const[data,investors]=await Promise.all([api.listCertificates(offering.id,asOf),api.listInvestors()]);
+  const[data,investors,transfers]=await Promise.all([
+    api.listCertificates(offering.id,asOf),api.listInvestors(),api.listTransfers(offering.id)]);
   const{certificates,classNames,classes,totalCapital,totalAccrued,totalOutstanding,totalPercent}=data;
   const allClassNames=[...new Set([...(classes||[]).map(c=>c.name),...classNames])];
   const today=todayISO();
@@ -4783,7 +5535,9 @@ async function certificatesTab(state){
     el('div',{class:'section-head'},el('h2',{},'Certificate roster'),el('div',{style:'display:flex;gap:8px'},renumBtn,addBtn)),
     !certificates.length
       ? emptyState('No certificates issued yet. They are created automatically when you conduct a closing, or add one manually.',el('button',{class:'btn btn-primary',onclick:()=>openCertificateForm(offering,investors,allClassNames,null,()=>refresh())},'Add a certificate'))
-      : el('div',{},...[...groups.entries()].map(([cls,certs])=>certClassPanel(cls,certs,offering,investors,allClassNames))));
+      : el('div',{},...[...groups.entries()].map(([cls,certs])=>certClassPanel(cls,certs,offering,investors,allClassNames))),
+    // The chain of title sits under the roster it explains.
+    (certificates.length||transfers.length)?transfersPanel(offering,transfers,certificates,refreshTab):null);
 }
 // Optional editor for fixed class ownership splits (e.g. Common 20% / Class A 80%).
 function classStructurePanel(offering,classNames){
