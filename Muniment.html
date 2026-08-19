@@ -723,6 +723,10 @@ textarea{min-height:70px;resize:vertical;line-height:1.55}
   color:var(--muted);font-size:var(--t-base);background:var(--surface-2);
 }
 
+/* ---- Protection state --------------------------------------------------- */
+.protect-state{display:flex;flex-direction:column;align-items:flex-start;gap:2px}
+.protect-state p{max-width:68ch}
+
 /* ---- Command palette ---------------------------------------------------- */
 .cmd-backdrop{
   position:fixed;inset:0;background:var(--scrim);z-index:300;
@@ -1685,9 +1689,166 @@ function normalize(obj){
 function parseDB(text){
   const obj=JSON.parse(text);
   if(typeof obj!=='object'||obj===null)throw new Error('Not a valid Muniment data file');
+  if(isEnvelope(obj))throw new Error('This file is protected by a passphrase. Open it from the file buttons so it can be unlocked.');
   return normalize(obj);
 }
 function nextId(kind){db.seq[kind]=(db.seq[kind]||0)+1;return db.seq[kind];}
+
+/* ============================================================================
+   PASSPHRASE PROTECTION
+
+   A subscription file holds unmasked Social Security and taxpayer numbers
+   beside escrow account numbers. Masking them in lists is a courtesy to
+   whoever is looking over your shoulder; it does nothing for the file itself,
+   which until now was readable by anyone who could open it — in a sync folder,
+   on a stolen laptop, in a backup.
+
+   Sealed with AES-GCM under a key derived from a passphrase by PBKDF2. The key
+   is derived once and held for the session: deriving it costs most of a second
+   by design, and a write happens on every keystroke that lands.
+
+   The passphrase is not stored, recorded, hinted at or recoverable. That is
+   the property that makes this worth having, and the reason setting one asks
+   twice and says so plainly.
+   ========================================================================== */
+const ENC_FORMAT='muniment-encrypted';
+// OWASP's current floor for PBKDF2-HMAC-SHA256. Recorded in the envelope so a
+// file sealed today still opens when the number is raised tomorrow.
+const ENC_ITERATIONS=600000;
+const ENC_AVAILABLE=!!(globalThis.crypto&&crypto.subtle);
+function isEnvelope(o){return !!o&&typeof o==='object'&&o.format===ENC_FORMAT;}
+function b64(bytes){let s='';const b=new Uint8Array(bytes);
+  for(let i=0;i<b.length;i++)s+=String.fromCharCode(b[i]);return btoa(s);}
+function unb64(s){const bin=atob(String(s||''));const out=new Uint8Array(bin.length);
+  for(let i=0;i<bin.length;i++)out[i]=bin.charCodeAt(i);return out;}
+
+// The derived key and the salt it was derived with. Session-only: closing the
+// tab forgets them, which is the point.
+let cryptoKey=null;
+let cryptoSalt=null;
+let cryptoIterations=ENC_ITERATIONS;
+function isProtected(){return !!cryptoKey;}
+
+async function deriveKey(passphrase,salt,iterations){
+  const material=await crypto.subtle.importKey('raw',new TextEncoder().encode(passphrase),'PBKDF2',false,['deriveKey']);
+  return crypto.subtle.deriveKey({name:'PBKDF2',salt,iterations,hash:'SHA-256'},material,
+    {name:'AES-GCM',length:256},false,['encrypt','decrypt']);
+}
+async function seal(plaintext){
+  const iv=crypto.getRandomValues(new Uint8Array(12));
+  const ct=await crypto.subtle.encrypt({name:'AES-GCM',iv},cryptoKey,new TextEncoder().encode(plaintext));
+  return JSON.stringify({
+    format:ENC_FORMAT,v:1,app:'Muniment',
+    // Written in the clear on purpose: this is what tells a future reader how
+    // to open the file, and none of it weakens the key.
+    note:'Encrypted with AES-GCM under a key derived from a passphrase by PBKDF2-HMAC-SHA256. Without the passphrase this file cannot be read.',
+    kdf:{name:'PBKDF2',hash:'SHA-256',iterations:cryptoIterations,salt:b64(cryptoSalt)},
+    iv:b64(iv),data:b64(new Uint8Array(ct))},null,2);
+}
+// Throws on a wrong passphrase — AES-GCM authenticates, so a wrong key fails
+// rather than yielding plausible rubbish.
+async function unseal(env,passphrase){
+  const salt=unb64(env.kdf&&env.kdf.salt);
+  const iterations=Number(env.kdf&&env.kdf.iterations)||ENC_ITERATIONS;
+  const key=await deriveKey(passphrase,salt,iterations);
+  const plain=await crypto.subtle.decrypt({name:'AES-GCM',iv:unb64(env.iv)},key,unb64(env.data));
+  return{text:new TextDecoder().decode(plain),key,salt,iterations};
+}
+
+// What should actually be written — sealed when a passphrase is set, plain
+// when it is not.
+async function storageText(){
+  const plain=serialize();
+  if(!cryptoKey)return plain;
+  try{return await seal(plain);}
+  catch(e){
+    // Never fall back to writing the plaintext: a user who set a passphrase
+    // would have no way of knowing the file stopped being protected.
+    setSaveState('error');
+    toast('Could not encrypt this change, so nothing was written. Your data is unchanged on disk.','error');
+    throw e;
+  }
+}
+
+/* Asking for the passphrase. Returns the decrypted text, or throws if the
+   person declines — in which case the caller must leave the document alone. */
+function promptPassphrase(env,{title='Unlock this data',intro,confirmLabel='Unlock'}={}){
+  return new Promise((resolve,reject)=>{
+    const input=el('input',{type:'password',class:'inline-input grow',autocomplete:'current-password',
+      'aria-label':'Passphrase',placeholder:'Passphrase'});
+    const errorBox=el('div',{class:'form-error',style:'display:none'});
+    const submit=el('button',{class:'btn btn-primary',type:'submit'},confirmLabel);
+    const form=el('form',{class:'modal-body form-grid',onsubmit:async e=>{
+      e.preventDefault();
+      if(!input.value){errorBox.textContent='Enter the passphrase.';errorBox.style.display='';return;}
+      submit.disabled=true;submit.textContent='Unlocking…';
+      try{
+        const out=await unseal(env,input.value);
+        closeModal();resolve(out);
+      }catch(err){
+        errorBox.textContent='That passphrase does not open this file.';errorBox.style.display='';
+        submit.disabled=false;submit.textContent=confirmLabel;input.select();
+      }
+    }},
+      el('p',{class:'field-help'},intro||'This data is protected by a passphrase. It cannot be read without it, and there is no way to recover it.'),
+      errorBox,
+      el('div',{class:'form-row'},el('label',{for:'passphrase-input'},'Passphrase'),input),
+      el('div',{class:'modal-actions'},
+        el('button',{class:'btn btn-ghost',type:'button',onclick:()=>{closeModal();reject(new Error('cancelled'));}},'Cancel'),
+        submit));
+    input.id='passphrase-input';
+    openShell(title,form);
+    setTimeout(()=>input.focus(),40);
+  });
+}
+
+// The sealed document found at boot, held until it is opened. While it is set,
+// nothing is loaded and nothing is written — the same guard an unreadable
+// document gets, for the same reason.
+let lockedEnvelope=null;
+async function unlockAtBoot(){
+  if(!lockedEnvelope)return true;
+  if(!ENC_AVAILABLE){
+    setTimeout(()=>toast('This data is encrypted, and this browser does not offer the cryptography needed to open it. Nothing has been loaded and nothing will be written over it.','error'),400);
+    return false;
+  }
+  try{
+    const out=await promptPassphrase(lockedEnvelope,{
+      intro:'The data held in this browser is protected by a passphrase. Nothing is loaded, and nothing will be saved over it, until it is entered.'});
+    cryptoKey=out.key;cryptoSalt=out.salt;cryptoIterations=out.iterations;
+    lockedEnvelope=null;
+    adoptDocument(normalize(JSON.parse(out.text)));
+    renderFileStatus();
+    return true;
+  }catch{return false;}
+}
+// The screen behind a document that has not been opened. It says what is
+// there and offers the only thing that helps.
+function lockedView(){
+  return el('div',{class:'error-state'},
+    el('h2',{},'This data is protected'),
+    el('p',{},'The records held in this browser are encrypted. They cannot be read, and nothing will be written over them, until the passphrase is entered.'),
+    el('div',{style:'display:flex;gap:8px;justify-content:center;flex-wrap:wrap'},
+      el('button',{class:'btn btn-primary',onclick:async()=>{if(await unlockAtBoot())refresh();}},'Unlock…'),
+      FSA?el('button',{class:'btn btn-ghost',onclick:openDataFile},'Open a different file…'):
+        el('button',{class:'btn btn-ghost',onclick:importFile},'Import a different file…')));
+}
+
+// Reads a document that may be sealed, unlocking it if so. `what` names the
+// source for the dialog, so "this browser" and "muniment-data.json" read
+// differently to the person being asked.
+async function readDocument(text,what){
+  let obj;
+  try{obj=JSON.parse(text);}catch{throw new Error('Not a valid Muniment data file.');}
+  if(typeof obj!=='object'||obj===null)throw new Error('Not a valid Muniment data file.');
+  if(!isEnvelope(obj))return normalize(obj);
+  if(!ENC_AVAILABLE)throw new Error('This data is encrypted, and this browser does not offer the cryptography needed to open it.');
+  const out=await promptPassphrase(obj,{
+    intro:`${what||'This data'} is protected by a passphrase. It cannot be read without it, and there is no way to recover it.`});
+  // Hold the key so every later write seals with the same salt.
+  cryptoKey=out.key;cryptoSalt=out.salt;cryptoIterations=out.iterations;
+  return normalize(JSON.parse(out.text));
+}
 
 /* Persistence */
 let saveTimer=null;
@@ -1697,6 +1858,10 @@ let writing=Promise.resolve(); // one file write at a time, never interleaved
 let quotaWarned=false;
 const SAVE_DEBOUNCE=250,SAVE_MAX_WAIT=1500;
 function serialize(){return JSON.stringify(db,null,2);}
+// The exact bytes the next file write should contain, prepared by persist().
+// Sealing is asynchronous and a page being hidden is no time to start an
+// encryption; the text is settled while there is still time to settle it.
+let pendingText=null;
 
 // Coalesce rapid edits into a single write, but resolve every caller only once
 // a write that contains their change has completed.
@@ -1714,7 +1879,7 @@ async function flushWrite(){
     if(!fileHandle){setSaveState('local');return;}
     try{
       const w=await fileHandle.createWritable();
-      await w.write(new Blob([serialize()],{type:'application/json'}));
+      await w.write(new Blob([pendingText??serialize()],{type:'application/json'}));
       await w.close();
       setSaveState('saved');
     }catch(e){setSaveState('error');toast('Could not save to your data file: '+e.message,'error');}
@@ -1792,7 +1957,12 @@ async function persist(){
   if(readOnly){toast('Saving is held: the data already in this browser could not be read. Open your data file, or import a backup, to resume.','error');return;}
   if(staleTab){toast('Saving is held: another tab has saved over this data. Load what it saved, or close this tab.','error');return;}
   db.meta.rev=(Number(db.meta.rev)||0)+1;
-  const text=serialize();
+  // Sealed here, once, rather than inside the debounced write: this is the
+  // last point at which failing to encrypt can still stop the write.
+  let text;
+  try{text=await storageText();}
+  catch{db.meta.rev=(Number(db.meta.rev)||0)-1;return;}
+  pendingText=text;
   try{localStorage.setItem(LS_KEY,text);quotaWarned=false;writeBeacon();}
   catch(e){
     // Swallowing this used to leave the dot claiming "Saved in this browser"
@@ -1838,7 +2008,9 @@ async function openDataFile(){
     const[h]=await window.showOpenFilePicker({types:[{description:'Muniment data',accept:{'application/json':['.json']}}]});
     if(!(await verifyPermission(h,true)))throw new Error('Permission to the file was denied.');
     const text=await(await h.getFile()).text();
-    const parsed=parseDB(text);
+    // Sealed files are unlocked here rather than rejected; the key is held for
+    // the session so every later write seals with the same salt.
+    const parsed=await readDocument(text,h.name);
     if(hasData(db)){
       const ok=await confirmDialog('Opening this file will replace the data currently loaded in this browser. Your other data file (if any) is not affected. Continue?',{danger:true,confirmLabel:'Open file'});
       if(!ok)return;
@@ -1851,7 +2023,7 @@ async function reopenFromHandle(h){
   try{
     if(!(await verifyPermission(h,true))){toast('Permission to the file was denied.','error');return;}
     const text=await(await h.getFile()).text();
-    const parsed=parseDB(text);
+    const parsed=await readDocument(text,h.name);
     // The browser mirror can legitimately be ahead of the file: a change made
     // in the last moments before the tab closed reaches localStorage
     // immediately but the file only after the write settles. Replacing
@@ -1870,8 +2042,12 @@ async function reopenFromHandle(h){
 }
 function disconnectFile(){fileHandle=null;fileName=null;idbSet('fileHandle',null);renderFileStatus();toast('Disconnected. Changes are still kept in this browser.','info');}
 function stamp(){return new Date().toISOString().replace(/[:.]/g,'-').slice(0,19);}
-function downloadCopy(){
-  const blob=new Blob([serialize()],{type:'application/json'});const url=URL.createObjectURL(blob);
+async function downloadCopy(){
+  // A copy of a protected file is protected too, or the protection was
+  // theatre: the copy is the one most likely to end up somewhere else.
+  let text;
+  try{text=await storageText();}catch{return;}
+  const blob=new Blob([text],{type:'application/json'});const url=URL.createObjectURL(blob);
   const a=el('a',{href:url,download:`muniment-backup-${stamp()}.json`});document.body.appendChild(a);a.click();a.remove();
   URL.revokeObjectURL(url);
   // Remembered so the app can say how long it has been since the last one.
@@ -1882,7 +2058,7 @@ function downloadCopy(){
 function importFile(){
   const inp=el('input',{type:'file',accept:'.json,application/json'});
   inp.onchange=async()=>{const f=inp.files[0];if(!f)return;
-    try{const parsed=parseDB(await f.text());
+    try{const parsed=await readDocument(await f.text(),f.name);
       if(hasData(db)&&!(await confirmDialog('Importing will replace the data currently loaded. Continue?',{danger:true,confirmLabel:'Import'})))return;
       adoptDocument(parsed);await persist();renderFileStatus();refresh();toast('Data imported.','success');
     }catch(e){toast('Import failed: '+e.message,'error');}};
@@ -2677,6 +2853,23 @@ const api={
     const rows=db.activity.filter(a=>offeringId==null||a.offering_id===Number(offeringId));
     return rows.slice(-limit).reverse();},
 
+  /* Passphrase protection. Setting one re-seals everything the app writes from
+     the next save onward; the copies already on disk stay as they were until
+     they are overwritten, which is why the UI says to save a fresh copy. */
+  async setPassphrase(passphrase){
+    if(!ENC_AVAILABLE)throw new Error('This browser does not offer the cryptography this needs.');
+    if(!passphrase||passphrase.length<8)throw new Error('Use at least eight characters. This is the only thing standing between the file and whoever holds it.');
+    const salt=crypto.getRandomValues(new Uint8Array(16));
+    cryptoKey=await deriveKey(passphrase,salt,ENC_ITERATIONS);
+    cryptoSalt=salt;cryptoIterations=ENC_ITERATIONS;
+    logActivity('changed','Protected this data with a passphrase',null);
+    await persist();return{ok:true};},
+  async clearPassphrase(){
+    cryptoKey=null;cryptoSalt=null;
+    logActivity('changed','Removed the passphrase from this data',null);
+    await persist();return{ok:true};},
+  isProtected(){return isProtected();},
+
   /* Generations — the states this document passed through before the current
      one. Held in this browser, so not a backup; but the state before a wrong
      edit is exactly what a single-copy file cannot otherwise give back. */
@@ -2684,7 +2877,9 @@ const api={
   async restoreGeneration(at){
     const text=await idbGet('gen:'+at);
     if(!text)throw new Error('That version is no longer held.');
-    const parsed=parseDB(text);
+    // Generations are held exactly as they were written, so a protected
+    // document's earlier states are protected too and need unlocking.
+    const parsed=await readDocument(text,'That saved version');
     // Restoring is itself an act worth being able to take back.
     captureUndo(`restoring the version saved at ${fmtDateTime(at)}`);
     const rev=Number(db.meta.rev)||0;
@@ -4508,6 +4703,24 @@ async function renderSettings(){
 
   wrap.appendChild(el('section',{class:'panel'},
     el('div',{class:'section-head',style:'margin-top:0'},
+      el('div',{},el('h2',{},'Protection'),
+        el('div',{class:'section-figures'},el('span',{},'Whether this data can be read by anyone who holds the file.'))),
+      ENC_AVAILABLE?el('button',{class:'btn '+(isProtected()?'btn-ghost':'btn-primary')+' btn-sm',
+        onclick:isProtected()?openChangePassphrase:openSetPassphrase},
+        isProtected()?'Change…':'Set a passphrase…'):null),
+    el('div',{class:'protect-state'},
+      pill(isProtected()?'Encrypted':'Readable by anyone with the file',isProtected()?'success':'warn'),
+      el('p',{class:'field-help',style:'margin:10px 0 0'},isProtected()
+        ?'The data file, the copy in this browser and every backup you download are encrypted with AES-GCM under a key derived from your passphrase. The passphrase is not stored anywhere and cannot be recovered — if it is lost, so is the data.'
+        :'This file is plain JSON. It holds unmasked Social Security and taxpayer numbers and escrow account numbers in full — masking them in lists does nothing for the file itself. Anyone who can open the file can read them.')),
+    isProtected()?el('div',{class:'file-btns',style:'margin-top:12px'},
+      el('button',{class:'mini-btn',onclick:downloadCopy},'Save an encrypted copy'),
+      el('button',{class:'mini-btn',onclick:openRemovePassphrase},'Remove protection')):null,
+    !ENC_AVAILABLE?el('p',{class:'field-help',style:'margin:10px 0 0'},
+      'This browser does not offer the cryptography this needs. Opening the same file in a current version of Chrome, Edge, Safari or Firefox will.'):null));
+
+  wrap.appendChild(el('section',{class:'panel'},
+    el('div',{class:'section-head',style:'margin-top:0'},
       el('div',{},el('h2',{},'Previous versions'),
         el('div',{class:'section-figures'},el('span',{},'States this document passed through, kept in this browser.')))),
     el('p',{class:'field-help',style:'margin:0 0 14px'},
@@ -4528,6 +4741,79 @@ async function renderSettings(){
     ],generations,{caption:'Previous versions of this document'})));
 
   return wrap;
+}
+
+/* ---- Setting, changing and removing the passphrase ------------------------
+   Typed twice, and the warning is not softened: a lost passphrase is lost
+   data, and a person deciding this should be deciding it with that in front
+   of them rather than discovering it later. */
+function passphraseForm({title,intro,submitLabel,needCurrent,onReady}){
+  const current=el('input',{type:'password',class:'inline-input grow',autocomplete:'current-password',placeholder:'Current passphrase'});
+  const first=el('input',{type:'password',class:'inline-input grow',autocomplete:'new-password',placeholder:'New passphrase'});
+  const again=el('input',{type:'password',class:'inline-input grow',autocomplete:'new-password',placeholder:'Type it again'});
+  const errorBox=el('div',{class:'form-error',style:'display:none'});
+  const fail=m=>{errorBox.textContent=m;errorBox.style.display='';};
+  const submit=el('button',{class:'btn btn-primary',type:'submit'},submitLabel);
+  const form=el('form',{class:'modal-body form-grid',onsubmit:async e=>{
+    e.preventDefault();errorBox.style.display='none';
+    if(needCurrent){
+      // Checked against the key actually in use rather than a remembered
+      // string — the key is the only evidence of what the passphrase is.
+      if(!cryptoSalt){fail('This data is not protected.');return;}
+      if(!(await passphraseMatches(current.value))){fail('That is not the current passphrase.');return;}
+    }
+    if(first.value!==again.value){fail('The two passphrases do not match.');return;}
+    submit.disabled=true;submit.textContent='Working…';
+    try{await onReady(first.value);closeModal();}
+    catch(err){fail(err.message);submit.disabled=false;submit.textContent=submitLabel;}
+  }},
+    el('p',{class:'field-help'},intro),
+    errorBox,
+    needCurrent?el('div',{class:'form-row'},el('label',{},'Current passphrase'),current):null,
+    el('div',{class:'form-row'},el('label',{},'New passphrase'),first),
+    el('div',{class:'form-row'},el('label',{},'Type it again'),again),
+    el('div',{class:'notes-block'},el('p',{},'Muniment does not store this passphrase, cannot hint at it, and cannot recover it. If it is lost, the records are lost with it. Keep it where you keep the rest of the firm’s credentials.')),
+    el('div',{class:'modal-actions'},
+      el('button',{class:'btn btn-ghost',type:'button',onclick:closeModal},'Cancel'),
+      submit));
+  openShell(title,form,{wide:true});
+  setTimeout(()=>(needCurrent?current:first).focus(),40);
+}
+// Does this passphrase open the current document? Sealed with a candidate key
+// and read back — the only honest test, and cheap enough at a few bytes.
+async function passphraseMatches(candidate){
+  if(!cryptoKey||!cryptoSalt)return false;
+  try{
+    const key=await deriveKey(candidate,cryptoSalt,cryptoIterations);
+    const iv=crypto.getRandomValues(new Uint8Array(12));
+    const probe=new TextEncoder().encode('muniment');
+    const ct=await crypto.subtle.encrypt({name:'AES-GCM',iv},cryptoKey,probe);
+    await crypto.subtle.decrypt({name:'AES-GCM',iv},key,ct);
+    return true;
+  }catch{return false;}
+}
+function openSetPassphrase(){
+  passphraseForm({
+    title:'Protect this data with a passphrase',
+    intro:'From the next save onward, the data file, the copy held in this browser and every backup you download are encrypted. Copies already written stay as they are until they are overwritten — save a fresh copy afterwards.',
+    submitLabel:'Protect this data',needCurrent:false,
+    onReady:async p=>{await api.setPassphrase(p);toast('This data is now encrypted. Save a fresh copy to replace any unprotected backups.','success');refresh();}});
+}
+function openChangePassphrase(){
+  passphraseForm({
+    title:'Change the passphrase',
+    intro:'The data is re-sealed under the new passphrase from the next save onward. Any copy written before that still opens with the old one.',
+    submitLabel:'Change it',needCurrent:true,
+    onReady:async p=>{await api.setPassphrase(p);toast('Passphrase changed.','success');refresh();}});
+}
+async function openRemovePassphrase(){
+  const ok=await confirmDialog(
+    'Remove the passphrase? From the next save onward this data is written as plain, readable JSON — including unmasked taxpayer numbers and escrow account numbers. Encrypted copies already on disk are unaffected.',
+    {danger:true,confirmLabel:'Remove protection'});
+  if(!ok)return;
+  await api.clearPassphrase();
+  toast('Protection removed. This data is now written in the clear.','error');
+  refresh();
 }
 
 /* ---- The More sheet — what the sidebar footer holds on a wider screen ---- */
@@ -4701,6 +4987,8 @@ async function router(){
   document.title=(navKey==='dashboard'?'Muniment':routeTitle(navKey,hash)+' · Muniment');
   clear(viewEl);viewEl.appendChild(skeleton());
   try{
+    // A document that has not been opened yet has no routes worth drawing.
+    if(lockedEnvelope){clear(viewEl);viewEl.appendChild(lockedView());return;}
     // match[0] is the regex, match[1] the handler, match[2] the nav key.
     const node=match?await match[1](hash.match(match[0])):notFound();
     clear(viewEl);viewEl.appendChild(node);
@@ -4750,14 +5038,23 @@ async function boot(){
   let raw=localStorage.getItem(LS_KEY);
   if(!raw){for(const k of LS_KEYS_OLD){const old=localStorage.getItem(k);if(old){raw=old;break;}}}
   if(raw){
-    try{db=parseDB(raw);}
-    catch(e){
-      // Never overwrite data we failed to read. The unreadable copy is set
-      // aside under its own key and saving is held until the user decides.
-      const stash=`muniment:unreadable:${Date.now()}`;
-      try{localStorage.setItem(stash,raw);}catch{}
-      db=EMPTY();readOnly=true;
-      setTimeout(()=>toast(`The saved data in this browser could not be read, so nothing has been loaded and nothing will be saved over it. A copy is held under ${stash}.`,'error'),400);
+    // Sealed is not the same as unreadable: it needs a passphrase, not a
+    // rescue. Saving is held either way, so a document that could not be read
+    // is never replaced by an empty one.
+    let head=null;
+    try{head=JSON.parse(raw);}catch{}
+    if(isEnvelope(head)){
+      lockedEnvelope=head;readOnly=true;
+    }else{
+      try{db=parseDB(raw);}
+      catch(e){
+        // Never overwrite data we failed to read. The unreadable copy is set
+        // aside under its own key and saving is held until the user decides.
+        const stash=`muniment:unreadable:${Date.now()}`;
+        try{localStorage.setItem(stash,raw);}catch{}
+        db=EMPTY();readOnly=true;
+        setTimeout(()=>toast(`The saved data in this browser could not be read, so nothing has been loaded and nothing will be saved over it. A copy is held under ${stash}.`,'error'),400);
+      }
     }
   }
   // Try to remember a previously connected file (needs a click to re-grant).
@@ -4770,7 +5067,11 @@ async function boot(){
   const bottomMore=document.getElementById('bottom-more');if(bottomMore)bottomMore.addEventListener('click',openMoreSheet);
   const appMore=document.getElementById('app-more');if(appMore)appMore.addEventListener('click',openMoreSheet);
   const appSearch=document.getElementById('app-search');if(appSearch)appSearch.addEventListener('click',openPalette);
-  router();
+  // Drawn before the passphrase is asked for, so the screen behind the box
+  // says what is going on. A blank page behind it reads as an empty file,
+  // which is the one thing this document is not.
+  await router();
+  if(lockedEnvelope&&await unlockAtBoot())await router();
   // After the first paint, so a notice never delays the record appearing.
   setTimeout(()=>{if(!readOnly)backupStalenessNotice();},1200);
 }
