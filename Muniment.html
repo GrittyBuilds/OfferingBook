@@ -637,6 +637,17 @@ textarea{min-height:70px;resize:vertical;line-height:1.55}
 }
 .toast-success{border-left-color:var(--green)}
 .toast-error{border-left-color:var(--red)}
+/* A toast that carries an action stays until it is answered or times out; the
+   action sits on its own line so a long sentence never squeezes it. */
+.toast-act{display:flex;flex-direction:column;align-items:flex-start;gap:9px}
+.toast-act .toast-btn{
+  font:inherit;font-size:var(--t-sm);font-weight:650;letter-spacing:.01em;
+  background:var(--brand-soft);color:var(--brand);border:1px solid var(--brand-line);
+  border-radius:var(--radius-sm);padding:5px 12px;cursor:pointer;
+}
+/* --surface rather than a literal: it is the light value on the dark brand and
+   the dark value on the light brand, so the hover passes in both themes. */
+.toast-act .toast-btn:hover{background:var(--brand);color:var(--surface)}
 
 /* ---- Modal -------------------------------------------------------------- */
 .modal-backdrop{backdrop-filter:blur(2px)}
@@ -1210,6 +1221,13 @@ function fmtDate(s){const d=dayOf(s);if(!d)return s?String(s):'—';
 // Long form for print: "14 August 2026".
 function fmtDateLong(s){const d=dayOf(s);if(!d)return s?String(s):'—';
   return `${d.getDate()} ${MONTHS_LONG[d.getMonth()]} ${d.getFullYear()}`;}
+// With the time, for the trail and for saved versions, where two entries on
+// one day need telling apart: "14 Aug 2026, 09:41".
+function fmtDateTime(s){
+  const d=s?new Date(s):null;
+  if(!d||isNaN(d))return s?String(s):'—';
+  const hh=String(d.getHours()).padStart(2,'0'),mm=String(d.getMinutes()).padStart(2,'0');
+  return `${d.getDate()} ${MONTHS_SHORT[d.getMonth()]} ${d.getFullYear()}, ${hh}:${mm}`;}
 // Today, as the yyyy-mm-dd a date input wants, in local time rather than UTC.
 function todayISO(){const d=new Date();
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;}
@@ -1217,11 +1235,19 @@ const MONTHS_SHORT=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct',
 const MONTHS_LONG=['January','February','March','April','May','June','July','August','September','October','November','December'];
 function relDays(d){if(d===null||d===undefined)return'';if(d===0)return'today';return d>0?`in ${d} day${d===1?'':'s'}`:`${-d} day${d===-1?'':'s'} ago`;}
 function pill(t,k='default'){return el('span',{class:`pill pill-${k}`},t);}
-function toast(msg,kind='info'){
+// action: {label, run} adds a button and holds the toast open longer — long
+// enough to notice a delete and take it back, which is what it is for.
+function toast(msg,kind='info',action=null){
   const root=document.getElementById('toast-root');
-  const t=el('div',{class:`toast toast-${kind}`},msg);root.appendChild(t);
+  const t=el('div',{class:`toast toast-${kind}`+(action?' toast-act':'')},msg);
+  let timer=null;
+  const dismiss=()=>{clearTimeout(timer);t.classList.remove('show');setTimeout(()=>t.remove(),300);};
+  if(action)t.appendChild(el('button',{class:'toast-btn',type:'button',onclick:async()=>{
+    dismiss();await action.run();}},action.label));
+  root.appendChild(t);
   requestAnimationFrame(()=>t.classList.add('show'));
-  setTimeout(()=>{t.classList.remove('show');setTimeout(()=>t.remove(),300);},3200);
+  timer=setTimeout(dismiss,action?10000:3200);
+  return dismiss;
 }
 // Parsed from the digits rather than by multiplying a float by 100: 1.005 is
 // 101 cents at the hand, but 100.49999999999999 in binary floating point, and
@@ -1545,15 +1571,32 @@ const LS_KEY='muniment:data';
 // Data saved under earlier names, newest first. Migrated on load; nothing is lost in the rename.
 const LS_KEYS_OLD=['capitalvault:data','offeringbook:data'];
 const THEME_KEY='muniment:theme';
-const COLLECTIONS=['offerings','investors','subscriptions','escrow','tasks','reconciliations','closings','certificates','parties','activity'];
-const EMPTY=()=>({meta:{version:2,app:'Muniment'},
-  seq:{offerings:0,investors:0,subscriptions:0,escrow:0,tasks:0,reconciliations:0,closings:0,certificates:0,parties:0,activity:0},
+// The document's shape. Bumping this runs the migrations below on load.
+const SCHEMA_VERSION=3;
+const COLLECTIONS=['offerings','investors','subscriptions','escrow','tasks','reconciliations','closings','certificates','parties','activity',
+  // Added in v3.
+  'distributions','transfers','capital_calls','state_filings'];
+const EMPTY=()=>({meta:{version:SCHEMA_VERSION,app:'Muniment',rev:0},
+  seq:{offerings:0,investors:0,subscriptions:0,escrow:0,tasks:0,reconciliations:0,closings:0,certificates:0,parties:0,activity:0,
+    distributions:0,transfers:0,capital_calls:0,state_filings:0},
   offerings:[],investors:[],subscriptions:[],escrow:[],tasks:[],reconciliations:[],closings:[],certificates:[],
   // parties: issuers, escrow agents and counsel, entered once and picked thereafter.
   parties:[],
-  // activity: what the record proposed and you accepted, so an auto-filled
-  // figure can always be traced back to the fact it came from.
+  // activity: everything that has changed the record — what the app proposed
+  // and you accepted, and every edit and deletion made by hand. A figure in a
+  // securities file should be traceable to when it arrived and what put it there.
   activity:[],
+  // distributions: money paid out to holders after a closing, and what each
+  // holder's share of it retired.
+  distributions:[],
+  // transfers: the chain of title. A certificate is cancelled and a successor
+  // issued; neither row is ever silently rewritten.
+  transfers:[],
+  // capital_calls: dated obligations against a commitment, for offerings that
+  // fund in stages rather than in one payment.
+  capital_calls:[],
+  // state_filings: blue sky / state notice filings, one row per state.
+  state_filings:[],
   // settings: the firm's own constants — see SETTINGS_DEFAULTS.
   settings:{},
   // dismissed: suggestion keys waved off, with when. Keyed on the fact, so a
@@ -1574,6 +1617,48 @@ function adoptDocument(next){
   if(readOnly){readOnly=false;toast('Saving has resumed.','success');}
 }
 
+/* ---- Migrations ----------------------------------------------------------
+   Adding a key needs no migration: normalize merges defaults in. These are
+   for the other kind of change — where an existing record would otherwise be
+   read under a rule it was not written under. Each entry states the version it
+   produces, and they run in order for any document below it.
+
+   The rule they exist to keep: a figure that was true before an upgrade is
+   still true after it. A migration writes down what the old code assumed
+   implicitly, so a new default cannot silently restate an old certificate. */
+const MIGRATIONS=[
+  {to:3,apply(d){
+    // Accrual was simple interest on a 365-day year, everywhere, with no way
+    // to say otherwise. Write that down on every certificate that already
+    // exists so offering-level conventions only ever govern new ones.
+    for(const c of d.certificates)if(c.accrual_convention==null)c.accrual_convention='simple/365';
+    // Certificate numbering ran off two different rules (one accepted plain
+    // integers only, the other stripped non-digits). Infer the format each
+    // offering was actually using and record it, so both paths agree from here.
+    for(const o of d.offerings){
+      if(o.cert_number_format!=null)continue;
+      const nums=d.certificates.filter(c=>c.offering_id===o.id)
+        .map(c=>String(c.cert_number??'').trim()).filter(Boolean);
+      const parsed=nums.map(s=>s.match(/^(.*?)(\d+)$/)).filter(Boolean);
+      if(!parsed.length){o.cert_number_format=null;continue;}
+      // The commonest prefix wins; the widest zero-padding is kept, since
+      // narrowing it would renumber certificates already issued.
+      const tally=new Map();
+      for(const m of parsed)tally.set(m[1],(tally.get(m[1])||0)+1);
+      const prefix=[...tally.entries()].sort((a,b)=>b[1]-a[1]||a[0].localeCompare(b[0]))[0][0];
+      const pad=parsed.filter(m=>m[1]===prefix)
+        .reduce((w,m)=>Math.max(w,/^0\d/.test(m[2])?m[2].length:1),1);
+      o.cert_number_format={prefix,pad};
+    }
+  }}
+];
+function migrate(d){
+  const from=Number(d.meta&&d.meta.version)||0;
+  for(const m of MIGRATIONS)if(from<m.to)m.apply(d);
+  d.meta.version=SCHEMA_VERSION;
+  return d;
+}
+
 function normalize(obj){
   const base=EMPTY();
   const out={...base,...obj,meta:{...base.meta,...(obj.meta||{})},seq:{...base.seq,...(obj.seq||{})},
@@ -1583,14 +1668,18 @@ function normalize(obj){
     dismissed:{...base.dismissed,...(obj.dismissed||{})}};
   // The document is Muniment's once it has been adopted; nothing validates
   // against these fields, they simply say who wrote the file last.
-  out.meta.app='Muniment';out.meta.version=Math.max(2,Number(out.meta.version)||0);
+  out.meta.app='Muniment';
   for(const k of COLLECTIONS)
     out[k]=Array.isArray(out[k])?out[k].filter(r=>r&&typeof r==='object'):[];
+  // Run before the seq pass, so a migration that adds rows still gets counters
+  // ahead of the ids it created.
+  migrate(out);
   // keep seq counters ahead of any existing ids
   for(const k of COLLECTIONS){
     const maxId=out[k].reduce((m,r)=>Math.max(m,Number(r.id)||0),0);
     out.seq[k]=Math.max(Number(out.seq[k])||0,maxId);
   }
+  out.meta.rev=Number(out.meta.rev)||0;
   return out;
 }
 function parseDB(text){
@@ -1643,15 +1732,75 @@ function flushOnExit(){
 addEventListener('pagehide',flushOnExit);
 addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')flushOnExit();});
 
+/* ---- Two tabs, one document ---------------------------------------------
+   Each tab holds the whole document in memory and writes it entire, so the
+   later write wins and the other tab's work goes without a word. It cannot be
+   merged safely — these are ledgers, not text — but it can be *noticed*: every
+   write stamps a revision and a beacon, and a tab whose revision has been
+   overtaken says so and stops writing until the person decides. */
+const BEACON_KEY='muniment:beacon';
+const TAB_ID=Math.random().toString(36).slice(2,10);
+// Set when another tab has written since we last did. Nothing is saved while
+// it holds, exactly as an unreadable document holds saving.
+let staleTab=false;
+let staleWarned=false;
+function writeBeacon(){
+  try{localStorage.setItem(BEACON_KEY,JSON.stringify({tab:TAB_ID,rev:db.meta.rev,at:Date.now()}));}catch{}
+}
+function onBeacon(){
+  let b=null;
+  try{b=JSON.parse(localStorage.getItem(BEACON_KEY)||'null');}catch{}
+  if(!b||b.tab===TAB_ID)return;
+  if((Number(b.rev)||0)<(Number(db.meta.rev)||0))return;   // we are still ahead
+  staleTab=true;setSaveState('error');
+  if(staleWarned)return;
+  staleWarned=true;
+  toast('Another tab has this data file open and has saved over what is here. Nothing more will be saved from this tab.','error',
+    {label:'Load what the other tab saved',run:async()=>{
+      const raw=localStorage.getItem(LS_KEY);
+      if(!raw){toast('Nothing to load.','error');return;}
+      try{db=parseDB(raw);staleTab=false;staleWarned=false;setSaveState('local');refresh();
+        toast('Loaded. Saving has resumed.','success');}
+      catch(e){toast('Could not read what the other tab saved: '+e.message,'error');}}});
+}
+addEventListener('storage',e=>{if(e.key===BEACON_KEY)onBeacon();});
+
+/* ---- Generations ---------------------------------------------------------
+   One copy of the file is one copy: a bad edit reaches it on the next write
+   and there is nothing behind it. A short ring of previous states is kept
+   beside the file handle in IndexedDB, so the state before a mistake can be
+   read back. It is not a backup — it lives in the same browser — but it does
+   answer the failure this app can actually cause. */
+const GEN_KEEP=12;
+const GEN_MIN_GAP=90000;   // at most one generation every 90 seconds
+let lastGenAt=0;
+async function keepGeneration(text){
+  const now=Date.now();
+  if(now-lastGenAt<GEN_MIN_GAP)return;
+  lastGenAt=now;
+  try{
+    const index=(await idbGet('generations'))||[];
+    const stamp=new Date(now).toISOString();
+    await idbSet('gen:'+stamp,text);
+    index.push({at:stamp,bytes:text.length,records:countRecords(db)});
+    while(index.length>GEN_KEEP){const old=index.shift();await idbDel('gen:'+old.at);}
+    await idbSet('generations',index);
+  }catch{}
+}
+
 async function persist(){
   if(readOnly){toast('Saving is held: the data already in this browser could not be read. Open your data file, or import a backup, to resume.','error');return;}
-  try{localStorage.setItem(LS_KEY,serialize());quotaWarned=false;}
+  if(staleTab){toast('Saving is held: another tab has saved over this data. Load what it saved, or close this tab.','error');return;}
+  db.meta.rev=(Number(db.meta.rev)||0)+1;
+  const text=serialize();
+  try{localStorage.setItem(LS_KEY,text);quotaWarned=false;writeBeacon();}
   catch(e){
     // Swallowing this used to leave the dot claiming "Saved in this browser"
     // long after the browser had stopped accepting the write.
     if(!quotaWarned){quotaWarned=true;setSaveState('error');
       toast('This browser will not hold any more data. Connect a data file, or save a copy now.','error');}
   }
+  keepGeneration(text);
   if(!fileHandle){setSaveState('local');return;}
   setSaveState('saving');
   await scheduleWrite();
@@ -1664,6 +1813,7 @@ function idbOpen(){return new Promise((res,rej)=>{const r=indexedDB.open('offeri
   r.onupgradeneeded=()=>r.result.createObjectStore('kv');r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error);});}
 async function idbSet(k,v){try{const d=await idbOpen();return await new Promise((res,rej)=>{const t=d.transaction('kv','readwrite');t.objectStore('kv').put(v,k);t.oncomplete=()=>res();t.onerror=()=>rej(t.error);});}catch{}}
 async function idbGet(k){try{const d=await idbOpen();return await new Promise((res,rej)=>{const t=d.transaction('kv','readonly');const rq=t.objectStore('kv').get(k);rq.onsuccess=()=>res(rq.result);rq.onerror=()=>rej(rq.error);});}catch{return null;}}
+async function idbDel(k){try{const d=await idbOpen();return await new Promise((res,rej)=>{const t=d.transaction('kv','readwrite');t.objectStore('kv').delete(k);t.oncomplete=()=>res();t.onerror=()=>rej(t.error);});}catch{}}
 
 const FSA='showSaveFilePicker'in window;
 // On iOS and iPadOS every browser is WebKit, so the File System Access API is
@@ -1723,7 +1873,11 @@ function stamp(){return new Date().toISOString().replace(/[:.]/g,'-').slice(0,19
 function downloadCopy(){
   const blob=new Blob([serialize()],{type:'application/json'});const url=URL.createObjectURL(blob);
   const a=el('a',{href:url,download:`muniment-backup-${stamp()}.json`});document.body.appendChild(a);a.click();a.remove();
-  URL.revokeObjectURL(url);toast('Backup copy downloaded.','success');
+  URL.revokeObjectURL(url);
+  // Remembered so the app can say how long it has been since the last one.
+  db.settings={...db.settings,last_copy_at:nowISO()};
+  persist();
+  toast('Backup copy downloaded.','success');
 }
 function importFile(){
   const inp=el('input',{type:'file',accept:'.json,application/json'});
@@ -1967,7 +2121,17 @@ const SETTINGS_DEFAULTS={
   checklist_template:null,          // null → DEFAULT_CHECKLIST
   automation:'propose',             // 'propose' | 'off'
   mask_account_numbers:1,
-  date_defaults:1                   // date fields open on today
+  date_defaults:1,                  // date fields open on today
+  // Asked once, at the first record, and remembered either way — see
+  // maybeOfferDataFile(). Not a preference so much as a question already put.
+  file_prompt_answered:0,
+  // When a copy was last downloaded, so the app can say how long it has been.
+  last_copy_at:null,
+  // How new certificates are numbered on an offering that does not say
+  // otherwise. See formatCertNumber().
+  default_cert_number_format:null,
+  // The accrual convention new offerings start from. See ACCRUAL_CONVENTIONS.
+  default_accrual_convention:'simple/365'
 };
 function settings(){return{...SETTINGS_DEFAULTS,...(db.settings||{})};}
 
@@ -2097,14 +2261,33 @@ function derivedUnits(sub,scope){
   return Math.abs(raw-Math.round(raw))<1e-6?Math.round(raw):null;
 }
 
-/* ---- Activity trail ------------------------------------------------------ */
-// A short record of what the app proposed and what you did about it, so an
-// auto-filled figure can be traced back to the fact behind it. Capped at 400
-// entries: this is a data file you sync, not a log.
-const ACTIVITY_CAP=400;
+/* ---- Activity trail ------------------------------------------------------
+   What changed, when, and what put it there — proposals accepted, and every
+   edit and deletion made by hand.
+
+   It is still capped, because this is a data file you sync rather than a log
+   server. But an audit trail that silently drops its own oldest entries is
+   answering the wrong question with confidence: the entry that goes is by
+   definition the earliest, which is the one an argument about a figure is most
+   likely to need. So the cap is generous, and what it discarded is written
+   down and shown — a trail that says "and 40 before these" is honest in a way
+   that one which quietly begins in March is not. */
+const ACTIVITY_CAP=4000;
 function logActivity(kind,summary,offeringId,key){
   db.activity.push({id:nextId('activity'),at:nowISO(),kind,summary,offering_id:offeringId??null,key:key||null});
-  if(db.activity.length>ACTIVITY_CAP)db.activity=db.activity.slice(-ACTIVITY_CAP);
+  if(db.activity.length>ACTIVITY_CAP){
+    const cut=db.activity.length-ACTIVITY_CAP;
+    const dropped=db.activity.slice(0,cut);
+    db.activity=db.activity.slice(cut);
+    if(!db.meta.activity_dropped)db.meta.activity_dropped={count:0,through:null};
+    db.meta.activity_dropped.count+=cut;
+    db.meta.activity_dropped.through=dropped[dropped.length-1].at;
+  }
+}
+// What the trail no longer holds, for the screen that shows it.
+function activityDropped(){
+  const d=db.meta&&db.meta.activity_dropped;
+  return d&&d.count?d:null;
 }
 
 
@@ -2493,7 +2676,185 @@ const api={
   async listActivity(offeringId,limit=40){
     const rows=db.activity.filter(a=>offeringId==null||a.offering_id===Number(offeringId));
     return rows.slice(-limit).reverse();},
+
+  /* Generations — the states this document passed through before the current
+     one. Held in this browser, so not a backup; but the state before a wrong
+     edit is exactly what a single-copy file cannot otherwise give back. */
+  async listGenerations(){return ((await idbGet('generations'))||[]).slice().reverse();},
+  async restoreGeneration(at){
+    const text=await idbGet('gen:'+at);
+    if(!text)throw new Error('That version is no longer held.');
+    const parsed=parseDB(text);
+    // Restoring is itself an act worth being able to take back.
+    captureUndo(`restoring the version saved at ${fmtDateTime(at)}`);
+    const rev=Number(db.meta.rev)||0;
+    adoptDocument(parsed);
+    db.meta.rev=rev;
+    logActivity('restored',`Restored the version saved at ${fmtDateTime(at)}`,null);
+    await persist();return{ok:true};},
 };
+
+/* ============================================================================
+   THE TRAIL — what changed, when, and what put it there.
+
+   The trail used to record only what the app proposed and you accepted, which
+   answers the easy half of the question. The hard half — "when did this figure
+   change, and to what" — needs every edit and every deletion in it too.
+
+   Every write goes through the API, so it is taken here rather than at forty
+   call sites: one table, read alongside the methods it describes, instead of a
+   logging line to forget inside each of them.
+   ========================================================================== */
+const oNameOf=id=>{const o=db.offerings.find(x=>x.id===Number(id));return o?o.name:'an offering';};
+const iNameOf=id=>{const i=db.investors.find(x=>x.id===Number(id));return i?investorDisplayName(i):'an investor';};
+const subWho=id=>{const s=db.subscriptions.find(x=>x.id===Number(id));return s?iNameOf(s.investor_id):'a subscriber';};
+const subOff=id=>{const s=db.subscriptions.find(x=>x.id===Number(id));return s?s.offering_id:null;};
+
+// name → (args) => [summary, offeringId] | null
+// Evaluated BEFORE the call, while the record still holds what is about to be
+// removed. Creations name themselves from the body they were handed.
+const AUDIT={
+  createOffering:b=>[`Created the offering “${str(b.name)||'untitled'}”`,null],
+  updateOffering:(id,b)=>[`Edited the offering “${str(b.name)||oNameOf(id)}”`,Number(id)],
+  deleteOffering:id=>[`Deleted the offering “${oNameOf(id)}” and everything recorded on it`,null],
+  saveTranche:(offId,b,tid)=>[`${tid?'Edited':'Added'} the tranche “${str(b.name)||''}”`,Number(offId)],
+  deleteTranche:(offId,tid)=>[`Deleted a tranche from “${oNameOf(offId)}”`,Number(offId)],
+  saveClasses:(offId)=>[`Changed the ownership classes on “${oNameOf(offId)}”`,Number(offId)],
+
+  createInvestor:b=>[`Added ${str(b.name)||[str(b.first_name),str(b.last_name)].filter(Boolean).join(' ')||'a contact'} to the contact book`,null],
+  updateInvestor:id=>[`Edited the contact ${iNameOf(id)}`,null],
+  deleteInvestor:id=>[`Deleted the contact ${iNameOf(id)}`,null],
+
+  createSubscription:(offId,b)=>[`Added ${iNameOf(b.investor_id)} to “${oNameOf(offId)}”`,Number(offId)],
+  updateSubscription:id=>[`Edited ${subWho(id)}'s subscription`,subOff(id)],
+  deleteSubscription:id=>[`Removed ${subWho(id)} from the offering`,subOff(id)],
+
+  createEscrow:(offId,b)=>[`Recorded a ${str(b.txn_type)||'escrow'} entry of ${money(dollarsToCents(b.amount))}`,Number(offId)],
+  updateEscrow:id=>{const e=db.escrow.find(x=>x.id===Number(id));
+    return[`Edited an escrow entry${e?` of ${money(e.amount_cents)}`:''}`,e?e.offering_id:null];},
+  deleteEscrow:id=>{const e=db.escrow.find(x=>x.id===Number(id));
+    return[`Deleted an escrow entry${e?` of ${money(e.amount_cents)}`:''}`,e?e.offering_id:null];},
+
+  createTask:(offId,b)=>[`Added the checklist step “${str(b.label)||''}”`,Number(offId)],
+  updateTask:(id,b)=>{const t=db.tasks.find(x=>x.id===Number(id));
+    // Ticking a box is the commonest write in the app; say which way it went.
+    const verb=b&&'done'in b?(b.done?'Completed':'Reopened'):'Edited';
+    return[`${verb} the checklist step “${t?t.label:''}”`,t?t.offering_id:null];},
+  deleteTask:id=>{const t=db.tasks.find(x=>x.id===Number(id));
+    return[`Deleted the checklist step “${t?t.label:''}”`,t?t.offering_id:null];},
+
+  createReconciliation:(offId,b)=>[`Reconciled “${oNameOf(offId)}” to a statement of ${money(dollarsToCents(b.statement_balance))}`,Number(offId)],
+  deleteReconciliation:id=>{const r=db.reconciliations.find(x=>x.id===Number(id));
+    return[`Deleted a reconciliation`,r?r.offering_id:null];},
+
+  createClosing:(offId,b)=>[`Held a closing on “${oNameOf(offId)}”, releasing ${money(dollarsToCents(b.amount_released))}`,Number(offId)],
+  deleteClosing:id=>{const c=db.closings.find(x=>x.id===Number(id));
+    return[`Undid the closing “${c?c.label:''}” — its release, its certificates and its closed subscriptions`,c?c.offering_id:null];},
+
+  createCertificate:(offId,b)=>[`Issued certificate ${str(b.cert_number)||''}`,Number(offId)],
+  updateCertificate:id=>{const c=db.certificates.find(x=>x.id===Number(id));
+    return[`Edited certificate ${c?c.cert_number:''}`,c?c.offering_id:null];},
+  deleteCertificate:id=>{const c=db.certificates.find(x=>x.id===Number(id));
+    return[`Deleted certificate ${c?c.cert_number:''}`,c?c.offering_id:null];},
+  renumberCertificates:offId=>[`Renumbered the certificates on “${oNameOf(offId)}”`,Number(offId)],
+
+  saveSettings:()=>[`Changed the firm settings`,null],
+  saveParty:(b,id)=>[`${id?'Edited':'Added'} ${str(b.name)||'a counterparty'} in the directory`,null],
+  deleteParty:id=>{const p=db.parties.find(x=>x.id===Number(id));
+    return[`Removed ${p?p.name:'a counterparty'} from the directory`,null];},
+};
+// acceptSuggestion / dismissSuggestion write their own, richer entries; the
+// rest are reads. Named so the wrapper's completeness check stays honest.
+const AUDIT_EXEMPT=new Set(['acceptSuggestion','dismissSuggestion','restoreDismissed','unlockWithPassphrase','setPassphrase','clearPassphrase']);
+
+// Actions the trail should carry but which do not pass through a single API
+// method — accepting a whole strip of suggestions, restoring a generation.
+function logChange(summary,offeringId){logActivity('changed',summary,offeringId??null);}
+
+for(const name of Object.keys(api)){
+  const fn=api[name];
+  if(typeof fn!=='function')continue;
+  if(!/^(create|update|delete|save|renumber|issue|record|cancel|reverse|refund)/.test(name))continue;
+  if(AUDIT_EXEMPT.has(name))continue;
+  const describe=AUDIT[name];
+  api[name]=async function(...args){
+    // Described first: a deletion can only name what it removed while it is
+    // still there. A describer that throws must never stop the write.
+    let entry=null;
+    if(describe){try{entry=describe(...args);}catch{entry=null;}}
+    const out=await fn.apply(this,args);
+    if(entry){logActivity('changed',entry[0],entry[1]??null);await persist();}
+    // The first record is the moment the browser-only copy starts to matter.
+    if(name.startsWith('create'))maybeOfferDataFile();
+    return out;
+  };
+}
+
+/* ---- Undo ----------------------------------------------------------------
+   One level, and only over the acts that cannot otherwise be reversed by
+   re-typing: the deletions that cascade. Enough to take back the click that
+   was a mistake; not so much that the app starts claiming to be a history. */
+let undoState=null;
+function captureUndo(label){
+  try{undoState={label,doc:JSON.parse(serialize()),at:Date.now()};}
+  catch{undoState=null;}
+}
+async function undoLast(){
+  if(!undoState)return false;
+  const{doc,label}=undoState;undoState=null;
+  // The revision must keep climbing across an undo, or the other-tab check
+  // reads the restored document as the stale one.
+  const rev=Number(db.meta.rev)||0;
+  db=normalize(doc);
+  db.meta.rev=rev;
+  logActivity('undone',`Took back: ${label}`,null);
+  await persist();refresh();
+  toast('Taken back.','success');
+  return true;
+}
+// Runs `act`, then offers to take it back for as long as the toast stands.
+async function withUndo(label,act,doneMessage){
+  captureUndo(label);
+  await act();
+  toast(doneMessage,'success',{label:'Undo',run:undoLast});
+}
+
+/* ---- Asking for a data file at the right moment --------------------------
+   Until a file is connected the browser copy is the only copy — the default
+   state for every new user, and the permanent state on an iPad. The welcome
+   panel offers a file while the dashboard is empty, which is exactly when
+   there is nothing to lose and no reason to say yes. So ask again at the first
+   record, when the answer means something.
+
+   A toast rather than a dialog, and the distinction matters: this fires on a
+   create, and a create is very often made from inside an open form. A dialog
+   would tear that form down mid-entry to ask a question about backups. It
+   asks once a session, stops for good once a file is connected, and takes no
+   answer for an answer. */
+let fileNudged=false;
+function maybeOfferDataFile(){
+  if(fileNudged||fileHandle||pendingHandle||!FSA||readOnly)return;
+  if(settings().file_prompt_answered)return;
+  if(countRecords(db)<1)return;
+  fileNudged=true;
+  toast('This is held only inside this browser. Clearing browsing data would take it with it.','info',
+    {label:'Store it in a file…',run:async()=>{
+      db.settings={...db.settings,file_prompt_answered:1};
+      await persist();
+      await newDataFile();}});
+}
+// A copy that was never taken is not a backup. Said once per session, and only
+// where the app cannot autosave to a file for you.
+function backupStalenessNotice(){
+  if(fileHandle||!hasData(db))return;
+  const at=settings().last_copy_at;
+  const days=at?Math.floor((Date.now()-new Date(at).getTime())/86400000):null;
+  if(days!==null&&days<7)return;
+  toast(days===null
+    ?'No copy of this data has been saved yet. It exists in this browser and nowhere else.'
+    :`The last copy of this data was saved ${days} days ago.`,
+    'error',{label:'Save a copy now',run:downloadCopy});
+}
 // `existing` supplies the values for fields the form did not render, so an
 // edit narrows to what was on screen rather than blanking the rest.
 function certFromBody(b,existing){const e=existing||{};return{
@@ -3130,7 +3491,9 @@ async function renderOffering(id){
         o.target_min_cents?el('div',{class:'osr-item'},s.minRaiseMet?pill('Min-raise met','success'):pill(`${s.minRaisePct}% of min-raise`,'warn')):null,
         s.daysToFinalClose!==null&&!['Closed','Terminated'].includes(o.status)?el('div',{class:'osr-item'+(s.daysToFinalClose<=14&&s.daysToFinalClose>=0?' urgent-text':'')},`Closes ${relDays(s.daysToFinalClose)}`):null));}
   async function deleteOffering(o){const ok=await confirmDialog(`Delete “${o.name}” and all its investors-on-offering, escrow entries, checklist and reconciliations? This cannot be undone.`,{danger:true,confirmLabel:'Delete offering'});
-    if(!ok)return;await api.deleteOffering(o.id);toast('Offering deleted.','success');navigate('/offerings');}
+    if(!ok)return;
+    await withUndo(`deleting the offering “${o.name}”`,()=>api.deleteOffering(o.id),`“${o.name}” deleted.`);
+    navigate('/offerings');}
   const root=el('div',{class:'view-offering'},header,strip,tabBar,tabContent);drawTab();return root;
 }
 function currentTab(){const m=location.hash.match(/[?&]tab=([^&]+)/);const t=m?decodeURIComponent(m[1]):'Overview';return TABS.includes(t)?t:'Overview';}
@@ -3181,7 +3544,9 @@ async function tranchesTab(state,drawTab,reloadOffering){
         el('div',{class:'oc-issuer'},[t.class_name,t.security_type].filter(Boolean).join(' · ')||'—')),
         el('div',{class:'row-actions'},
           iconButton('edit',`Edit ${t.name}`,()=>openTrancheForm(offering,t,async()=>{await reloadOffering();drawTab();})),
-          el('button',{class:'icon-btn danger',title:'Delete',onclick:async()=>{const ok=await confirmDialog(`Delete tranche “${t.name}”? Investors linked to it will be unassigned.`,{danger:true,confirmLabel:'Delete'});if(!ok)return;await api.deleteTranche(offering.id,t.id);toast('Tranche deleted.','success');await reloadOffering();drawTab();}},'@icon:trash'))),
+          el('button',{class:'icon-btn danger',title:'Delete',onclick:async()=>{const ok=await confirmDialog(`Delete tranche “${t.name}”? Investors linked to it will be unassigned.`,{danger:true,confirmLabel:'Delete'});if(!ok)return;
+            await withUndo(`deleting the tranche “${t.name}”`,()=>api.deleteTranche(offering.id,t.id),`Tranche “${t.name}” deleted.`);
+            await reloadOffering();drawTab();}},'@icon:trash'))),
       detailGrid([
         ['Price per unit',t.price_per_unit_cents!=null?money(t.price_per_unit_cents):null],
         ['Minimum investment',t.min_investment_cents!=null?money(t.min_investment_cents):null],
@@ -3258,7 +3623,9 @@ async function investorsTab(state,drawTab,reloadOffering){
         iconButton('edit',`Edit ${s.investor_name}'s subscription`,()=>openSubscriptionForm(offering,state.investors,s,async()=>{await reloadOffering();drawTab();})),
         iconButton('trash',`Remove ${s.investor_name} from this offering`,async()=>{
           const ok=await confirmDialog(`Remove ${s.investor_name} from this offering?`,{danger:true,confirmLabel:'Remove'});
-          if(!ok)return;await api.deleteSubscription(s.id);toast('Removed.','success');await reloadOffering();drawTab();},{danger:true}))}
+          if(!ok)return;
+          await withUndo(`removing ${s.investor_name} from the offering`,()=>api.deleteSubscription(s.id),`${s.investor_name} removed.`);
+          await reloadOffering();drawTab();},{danger:true}))}
     ],subs,{caption:`Investors on ${offering.name}`}));
 }
 async function escrowTab(state,drawTab,reloadOffering){
@@ -3393,7 +3760,9 @@ function closingCard(c,drawTab,reloadOffering){
     el('div',{style:'margin-top:12px;text-align:right'},
       el('button',{class:'btn btn-danger-ghost btn-sm',onclick:async()=>{
         const ok=await confirmDialog(`Delete “${c.label}”? This removes its escrow release/fee entries and re-opens (un-closes) its investors. This cannot be undone.`,{danger:true,confirmLabel:'Delete closing'});
-        if(!ok)return;await api.deleteClosing(c.id);toast('Closing deleted.','success');await reloadOffering();drawTab();}},'Delete closing')));
+        if(!ok)return;
+        await withUndo(`undoing the closing “${c.label}”`,()=>api.deleteClosing(c.id),`“${c.label}” undone.`);
+        await reloadOffering();drawTab();}},'Delete closing')));
 }
 function openClosingForm(offeringId,openSubs,existingCount,onDone){
   const o=db.offerings.find(x=>x.id===Number(offeringId))||{};
@@ -3698,7 +4067,8 @@ async function renderInvestor(id){
   const dName=investorDisplayName(inv);
   const totalCommitted=inv.subscriptions.reduce((a,s)=>a+(s.amount_committed_cents||0),0);
   async function del(){const ok=await confirmDialog(`Delete investor “${dName}”?`,{danger:true,confirmLabel:'Delete'});if(!ok)return;
-    try{await api.deleteInvestor(inv.id);toast('Investor deleted.','success');navigate('/investors');}catch(e){toast(e.message,'error');}}
+    try{await withUndo(`deleting the contact ${dName}`,()=>api.deleteInvestor(inv.id),`${dName} deleted.`);
+      navigate('/investors');}catch(e){toast(e.message,'error');}}
   return el('div',{class:'view-investor'},
     pageHeader(dName,{back:{href:'#/investors',label:'All investors'},subtitle:inv.entity_type+(inv.contact_name?` · ${inv.contact_name}`:''),
       actions:[el('button',{class:'btn btn-ghost',onclick:()=>openInvestorForm(inv,()=>refresh())},'Edit'),el('button',{class:'btn btn-danger-ghost',onclick:del},'Delete')]}),
@@ -4056,6 +4426,8 @@ async function renderSettings(){
 
   const parties=await api.listParties();
   const activity=await api.listActivity(null,25);
+  const generations=await api.listGenerations();
+  const dropped=activityDropped();
   const dismissedCount=Object.keys(db.dismissed||{}).length;
 
   const kv=(k,v)=>[k,v||el('span',{class:'muted-text'},'Not set')];
@@ -4119,8 +4491,8 @@ async function renderSettings(){
 
   wrap.appendChild(el('section',{class:'panel'},
     el('div',{class:'section-head',style:'margin-top:0'},
-      el('div',{},el('h2',{},'What has been accepted'),
-        el('div',{class:'section-figures'},el('span',{},'Every change the record proposed and you agreed to.'))),
+      el('div',{},el('h2',{},'What has changed'),
+        el('div',{class:'section-figures'},el('span',{},'Every change the record proposed and you agreed to, and every edit and deletion made by hand.'))),
       dismissedCount?el('button',{class:'btn btn-ghost btn-sm',onclick:async()=>{
         await api.restoreDismissed();toast('Dismissed suggestions restored.','success');redraw();}},
         `Restore ${dismissedCount} dismissed`):null),
@@ -4128,7 +4500,32 @@ async function renderSettings(){
     el('ul',{class:'activity-list'},...activity.map(a=>el('li',{class:'activity-item'},
       el('span',{class:'activity-kind'},a.kind),
       el('span',{style:'flex:1;min-width:0'},a.summary),
-      el('span',{class:'activity-when'},fmtDate(a.at)))))));
+      el('span',{class:'activity-when',title:fmtDateTime(a.at)},fmtDate(a.at))))),
+    // What the trail no longer holds. A record that quietly begins in March
+    // reads as complete; this one says where it actually starts.
+    dropped?el('p',{class:'field-help',style:'margin:12px 0 0'},
+      `${dropped.count} earlier ${dropped.count===1?'entry':'entries'}, through ${fmtDateTime(dropped.through)}, are no longer held: the trail keeps the most recent ${ACTIVITY_CAP.toLocaleString('en-US')}.`):null));
+
+  wrap.appendChild(el('section',{class:'panel'},
+    el('div',{class:'section-head',style:'margin-top:0'},
+      el('div',{},el('h2',{},'Previous versions'),
+        el('div',{class:'section-figures'},el('span',{},'States this document passed through, kept in this browser.')))),
+    el('p',{class:'field-help',style:'margin:0 0 14px'},
+      'A short ring of earlier states, so a wrong edit can be read back. These live in this browser alongside your records — they are a way to undo, not a backup. For a backup, keep copies of the data file itself.'),
+    !generations.length?emptyState('No previous versions held yet.'):
+    dataTable([
+      {label:'Saved',primary:true,render:g=>fmtDateTime(g.at)},
+      {label:'Records',num:true,render:g=>String(g.records??'—')},
+      {label:'Size',num:true,hide:true,render:g=>`${Math.round((g.bytes||0)/1024)} kB`},
+      {label:'',cls:'row-actions',render:g=>rowActions(
+        el('button',{class:'btn btn-ghost btn-sm',onclick:async()=>{
+          const ok=await confirmDialog(
+            `Replace everything currently loaded with the version saved at ${fmtDateTime(g.at)} — ${g.records} record${g.records===1?'':'s'}, against ${countRecords(db)} now? You can take this back straight afterwards.`,
+            {danger:countRecords(db)>(g.records??0),confirmLabel:'Restore that version'});
+          if(!ok)return;
+          try{await api.restoreGeneration(g.at);toast('Restored.','success',{label:'Undo',run:undoLast});refresh();}
+          catch(e){toast(e.message,'error');}}},'Restore'))}
+    ],generations,{caption:'Previous versions of this document'})));
 
   return wrap;
 }
@@ -4374,6 +4771,8 @@ async function boot(){
   const appMore=document.getElementById('app-more');if(appMore)appMore.addEventListener('click',openMoreSheet);
   const appSearch=document.getElementById('app-search');if(appSearch)appSearch.addEventListener('click',openPalette);
   router();
+  // After the first paint, so a notice never delays the record appearing.
+  setTimeout(()=>{if(!readOnly)backupStalenessNotice();},1200);
 }
 boot();
 </script>
