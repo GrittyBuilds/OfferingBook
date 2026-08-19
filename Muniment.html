@@ -217,6 +217,11 @@ a{color:inherit;text-decoration:none}
 .check-label input{width:17px;height:17px;accent-color:var(--green);cursor:pointer}
 .check-item.done .check-text{text-decoration:line-through;color:var(--muted)}
 .check-right{display:flex;align-items:center;gap:10px}.check-due{font-size:12px;color:var(--text-soft)}
+/* A date the record worked out, not one anybody typed — lighter, and in the
+   serif, so the difference is legible without a legend. */
+.check-due.implied{color:var(--muted);font-family:var(--font-serif);font-style:italic;font-size:12.5px}
+.check-due.overdue{color:var(--red);font-weight:600}
+.check-due.implied.overdue{color:var(--red);font-weight:500}
 .count-label{font-size:13px;color:var(--text-soft);font-weight:600}
 .add-task-row{display:flex;gap:8px;margin-top:16px;align-items:center}
 .inline-input{padding:8px 11px;border:1px solid var(--border-strong);border-radius:var(--radius-sm);font-size:14px;font-family:inherit;background:var(--surface);color:var(--text)}
@@ -563,6 +568,21 @@ textarea{min-height:70px;resize:vertical;line-height:1.55}
 }
 .cell-sub{font-size:var(--t-xs);color:var(--muted);margin-top:2px}
 .row-actions{display:flex;gap:4px;justify-content:flex-end}
+/* A sortable heading is a button, and looks like one only on approach — a
+   register should read as a register until you reach for it. */
+.data-table th.sortable{padding:0}
+.sort-btn{
+  font:inherit;color:inherit;letter-spacing:inherit;text-transform:inherit;
+  background:none;border:0;cursor:pointer;width:100%;text-align:inherit;
+  padding:10px 14px;display:flex;align-items:center;gap:5px;border-radius:0;
+}
+.data-table th.num .sort-btn{justify-content:flex-end}
+.sort-btn:hover{background:var(--surface-2);color:var(--brand)}
+.data-table th[data-sorted="asc"],.data-table th[data-sorted="desc"]{color:var(--brand)}
+.sort-arrow{font-size:.85em;opacity:.85}
+/* Nothing may depend on hover for the state itself: the arrow is the state. */
+@media(hover:none){.sort-btn{padding:11px 14px}}
+
 /* Row actions recede until the row is under the pointer, but never below the
    contrast floor and never away from the keyboard. */
 @media (hover:hover){
@@ -750,6 +770,56 @@ textarea{min-height:70px;resize:vertical;line-height:1.55}
 .suggest-empty{
   border:1px dashed var(--border-strong);border-radius:var(--radius);padding:16px;
   color:var(--muted);font-size:var(--t-base);background:var(--surface-2);
+}
+
+/* ---- Needs attention -----------------------------------------------------
+   A dated list, in date order, reading left to right: when, what, and which
+   kind of thing it is. The date column is fixed-width so the dates line up
+   into a column the eye can run down. */
+.attention-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
+.attention-item{
+  display:flex;align-items:baseline;gap:14px;padding:11px 4px;cursor:pointer;
+  border-top:var(--hairline);transition:background .12s;
+}
+.attention-item:first-child{border-top:0}
+.attention-item:hover{background:var(--surface-2)}
+.attention-when{
+  flex:0 0 128px;font-size:var(--t-sm);font-weight:650;color:var(--text-soft);
+  display:flex;flex-direction:column;gap:1px;
+}
+.attention-rel{font-weight:400;font-size:var(--t-xs);color:var(--muted)}
+.attention-item.overdue .attention-when{color:var(--red)}
+.attention-item.overdue .attention-rel{color:var(--red);opacity:.85}
+.attention-main{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.attention-title{font-weight:550}
+.attention-detail{font-size:var(--t-sm);color:var(--muted)}
+@media(max-width:720px){
+  .attention-item{flex-wrap:wrap;gap:6px 10px}
+  .attention-when{flex:0 0 auto;flex-direction:row;gap:8px;align-items:baseline}
+  .attention-main{flex:1 1 100%;order:3}
+}
+
+/* ---- Filter row ----------------------------------------------------------
+   Sits above the table it narrows, and says how much of it is left. */
+.filter-row{
+  display:flex;align-items:center;gap:9px;flex-wrap:wrap;
+  padding:11px 13px;margin:0 0 10px;
+  background:var(--surface-2);border:var(--hairline);border-radius:var(--radius-sm);
+}
+.filter-row .inline-input{max-width:210px}
+.filter-row .inline-input.grow{max-width:none;min-width:180px;flex:1 1 180px}
+.filter-row .inline-input.date{max-width:160px}
+.filter-dates{display:flex;align-items:center;gap:7px;font-size:var(--t-sm);color:var(--muted)}
+.filter-count{font-size:var(--t-sm);color:var(--muted);margin:0 0 10px;padding:0 2px}
+/* On a phone the row stacks. The date inputs carry a fixed 150px width from
+   the base rule and a 16px font on touch, which two of them side by side will
+   not honour inside 390px — so they are told to shrink, and to be allowed to. */
+@media(max-width:720px){
+  .filter-row{gap:8px}
+  .filter-row>*{max-width:none}
+  .filter-row .inline-input{max-width:none;width:auto;flex:1 1 100%;min-width:0}
+  .filter-dates{flex:1 1 100%;min-width:0;gap:6px}
+  .filter-dates .inline-input.date{width:auto;flex:1 1 0;min-width:0}
 }
 
 /* ---- As-at date row ------------------------------------------------------
@@ -1392,17 +1462,74 @@ function detailGrid(pairs){
      hide     carried on a wide screen, dropped from the phone card
    Every cell carries its column name in data-label, which is what the card
    layout shows in place of the header row. */
+/* Sorting. A column that says how to compare itself becomes clickable; the
+   rest stay as they are, because some columns have no order worth having
+   (a row of buttons) and some carry an order the record itself decided
+   (certificates run in funding-date sequence, and re-sorting the roster
+   should not look like renumbering it).
+
+   Three states, in this cycle: the record's own order, then ascending, then
+   descending, then back. The way out is always the order the file is in. */
+function sortValue(c,r,i){
+  const v=c.sort?c.sort(r,i):null;
+  if(v===null||v===undefined)return null;
+  return v;
+}
+function compareBy(c,dir){
+  return(a,b)=>{
+    const av=sortValue(c,a.row,a.i),bv=sortValue(c,b.row,b.i);
+    // Blanks sink, whichever way the column is pointing: "—" is not a small
+    // number, it is the absence of one.
+    if(av===null&&bv===null)return a.i-b.i;
+    if(av===null)return 1;
+    if(bv===null)return -1;
+    const n=typeof av==='number'&&typeof bv==='number'
+      ? av-bv
+      : String(av).localeCompare(String(bv),undefined,{numeric:true,sensitivity:'base'});
+    return (n||a.i-b.i)*dir;
+  };
+}
 function dataTable(columns,rows,{foot,rowAttrs,caption,className=''}={}){
   const cols=columns.filter(Boolean);
   const cell=(c,r,i)=>el('td',{
     class:[c.num?'num':'',c.primary?'rec-primary':'',c.hide?'rec-hide':'',c.cls||''].filter(Boolean).join(' '),
     dataset:{label:c.label||''}},...[].concat(c.render(r,i)));
+  const indexed=rows.map((row,i)=>({row,i}));
+  const tbody=el('tbody',{});
+  // null → the record's own order.
+  let sortCol=null,sortDir=1;
+  function fill(){
+    clear(tbody);
+    const ordered=sortCol?indexed.slice().sort(compareBy(sortCol,sortDir)):indexed;
+    for(const{row,i}of ordered)
+      tbody.appendChild(el('tr',rowAttrs?rowAttrs(row,i):{},...cols.map(c=>cell(c,row,i))));
+  }
+  const heads=cols.map(c=>{
+    const th=el('th',{scope:'col',
+      class:[c.num?'num':'',c.hide?'rec-hide':'',c.sort?'sortable':''].filter(Boolean).join(' ')});
+    if(!c.sort){th.textContent=c.label||'';return th;}
+    const arrow=el('span',{class:'sort-arrow','aria-hidden':'true'});
+    const btn=el('button',{class:'sort-btn',type:'button',
+      onclick:()=>{
+        if(sortCol!==c){sortCol=c;sortDir=1;}
+        else if(sortDir===1)sortDir=-1;
+        else sortCol=null;
+        heads.forEach(h=>h.dataset.sorted='');
+        th.dataset.sorted=sortCol===c?(sortDir===1?'asc':'desc'):'';
+        th.setAttribute('aria-sort',sortCol===c?(sortDir===1?'ascending':'descending'):'none');
+        arrow.textContent=sortCol===c?(sortDir===1?'↑':'↓'):'';
+        fill();
+      }},c.label||'',arrow);
+    th.setAttribute('aria-sort','none');
+    th.appendChild(btn);
+    return th;
+  });
+  fill();
   return el('div',{class:'table-wrap'},
     el('table',{class:('data-table responsive '+className).trim()},
       caption?el('caption',{class:'sr-only'},caption):null,
-      el('thead',{},el('tr',{},...cols.map(c=>el('th',{
-        scope:'col',class:[c.num?'num':'',c.hide?'rec-hide':''].filter(Boolean).join(' ')},c.label||'')))),
-      el('tbody',{},...rows.map((r,i)=>el('tr',rowAttrs?rowAttrs(r,i):{},...cols.map(c=>cell(c,r,i))))),
+      el('thead',{},el('tr',{},...heads)),
+      tbody,
       foot?el('tfoot',{},foot):null));
 }
 // Edit / delete, drawn and named, at a size a thumb can hit.
@@ -3081,6 +3208,12 @@ const api={
     // Closings and certificates were being orphaned rather than removed.
     db.closings=db.closings.filter(x=>x.offering_id!==id);
     db.certificates=db.certificates.filter(x=>x.offering_id!==id);
+    // Everything else the offering owns goes with it, or the file quietly
+    // accumulates rows belonging to something that no longer exists.
+    db.distributions=db.distributions.filter(x=>x.offering_id!==id);
+    db.transfers=db.transfers.filter(x=>x.offering_id!==id);
+    db.capital_calls=db.capital_calls.filter(x=>x.offering_id!==id);
+    db.state_filings=db.state_filings.filter(x=>x.offering_id!==id);
     await persist();return{ok:true};},
 
   // Tranches — sub-series within an offering that may carry their own terms.
@@ -3853,10 +3986,16 @@ const TASK_PROOFS={
   closing_held:o=>{const n=db.closings.filter(c=>c.offering_id===o.id).length;
     return n>0&&`${n} closing${n===1?' is':'s are'} on record.`;},
   escrow_released:o=>{const r=escrowSummary(o.id).releases;
-    return r>0&&`${money(r)} has been released to the issuer.`;}
+    return r>0&&`${money(r)} has been released to the issuer.`;},
+  blue_sky:o=>{const play=[...statesInPlay(o.id).keys()];
+    if(!play.length)return false;
+    const filed=new Set(stateFilings(o.id).filter(f=>f.filed_date).map(f=>f.state));
+    return play.every(c=>filed.has(c))&&
+      `Notice filings are recorded for every state on the roster: ${play.map(stateName).join(', ')}.`;}
 };
 // Which default step proves which. Index-aligned with DEFAULT_CHECKLIST.
 const DEFAULT_CHECKLIST_PROOFS={
+  'Blue sky / state notice filings':'blue_sky',
   'Set up escrow account with escrow agent':'escrow_setup',
   'File Form D with the SEC':'form_d',
   'Distribute offering documents to investors':'docs_sent',
@@ -3866,6 +4005,36 @@ const DEFAULT_CHECKLIST_PROOFS={
   'Hold closing':'closing_held',
   'Release escrow funds to issuer':'escrow_released'
 };
+
+/* ---- Due dates the record already implies --------------------------------
+   Checklist dates were typed by hand, while the deadlines that actually
+   matter are all computable: Form D runs fifteen days from the first sale,
+   the state notices run from the same date, and everything that must happen
+   before a closing is due by the final close deadline.
+
+   A step whose date the offering already implies should arrive carrying it,
+   in the same way its completion is already proved by the record. Where a
+   date has been typed, it stands — this only ever fills a blank. */
+const CHECKLIST_DUE={
+  form_d:o=>{const f=formDPosition(o);return f&&f.due?[f.due,`fifteen days after the first sale on ${fmtDate(f.firstSale)}`]:null;},
+  blue_sky:o=>{const f=formDPosition(o);return f&&f.due?[f.due,'the state notices run from the first sale, as the Form D does']:null;},
+  min_raise:o=>o.final_close_date?[o.final_close_date,'the final close deadline']:null,
+  closing_held:o=>o.first_close_date?[o.first_close_date,'the first / interim close date']
+    :(o.final_close_date?[o.final_close_date,'the final close deadline']:null),
+  escrow_released:o=>o.first_close_date?[o.first_close_date,'the first / interim close date']:null,
+  subs_collected:o=>o.first_close_date?[o.first_close_date,'the first / interim close date']:null,
+  accreditation:o=>o.first_close_date?[o.first_close_date,'the first / interim close date']:null,
+  escrow_setup:o=>o.launch_date?[o.launch_date,'the launch date']:null,
+  docs_sent:o=>o.launch_date?[o.launch_date,'the launch date']:null,
+};
+// The proof key a step answers to, whether it came from the standard list or
+// was written by hand.
+function taskProof(t){return t.proves||DEFAULT_CHECKLIST_PROOFS[t.label]||null;}
+function impliedDue(o,t){
+  const key=taskProof(t);
+  const fn=key&&CHECKLIST_DUE[key];
+  return fn?fn(o):null;
+}
 
 /* A suggestion:
    {key, kind, offeringId, title, detail, evidence, severity, apply}
@@ -4541,6 +4710,7 @@ async function renderDashboard(){
   return el('div',{class:'view-dashboard'},
     pageHeader('Dashboard',{subtitle:'Your practice at a glance.',actions:[newBtn],inBar:true}),
     showWelcome?welcomePanel():null,
+    attentionPanel(),
     suggestionPanel(null,refresh,{limit:5}),
     el('div',{class:'stat-row'},
       statCard('Active offerings',d.activeCount,{sub:`${d.offeringCount} total`}),
@@ -4619,7 +4789,7 @@ async function renderOffering(id){
       Certificates:()=>certificatesTab(state,drawTab,reloadOffering),
       Distributions:()=>distributionsTab(state,drawTab,reloadOffering),
       Filings:()=>filingsTab(state,drawTab,reloadOffering),
-      Checklist:()=>checklistTab(state),Reconciliation:()=>reconciliationTab(state)}[state.tab];
+      Checklist:()=>checklistTab(state,drawTab,reloadOffering),Reconciliation:()=>reconciliationTab(state)}[state.tab];
     const node=await render();clear(tabContent);tabContent.appendChild(node);}
   // A tab that carries its own state — the as-of date on the certificate
   // roster, say — needs a way to draw itself again without losing it.
@@ -4764,22 +4934,23 @@ async function investorsTab(state,drawTab,reloadOffering){
         addBtn)),
     !subs.length?emptyState('No investors on this offering yet.',state.investors.length?null:el('a',{class:'btn btn-ghost',onclick:()=>navigate('/investors')},'Add investors to your contact book first')):
     dataTable([
-      {label:'Investor',primary:true,render:s=>[
+      {label:'Investor',primary:true,sort:s=>s.investor_name,render:s=>[
         el('a',{class:'link',onclick:()=>navigate(`/investors/${s.investor_id}`)},s.investor_name),
         el('div',{class:'cell-sub'},s.email||s.phone||s.entity_type)]},
-      {label:'Status',render:s=>pill(s.status,SUBSCRIPTION_KIND[s.status]||'muted')},
-      {label:'Committed',num:true,render:s=>money(s.amount_committed_cents)},
+      {label:'Status',sort:s=>SUB_STATUS_RANK[s.status]??9,render:s=>pill(s.status,SUBSCRIPTION_KIND[s.status]||'muted')},
+      {label:'Committed',num:true,sort:s=>s.amount_committed_cents,render:s=>money(s.amount_committed_cents)},
       // What has actually arrived, against what was promised. This is the
       // column a subscription roster is really for, and it was not here.
-      {label:'Received',num:true,render:s=>{const got=Math.max(0,investorEscrow(offering.id,s.investor_id,s.id).clearedNet);
+      {label:'Received',num:true,sort:s=>Math.max(0,investorEscrow(offering.id,s.investor_id,s.id).clearedNet),
+        render:s=>{const got=Math.max(0,investorEscrow(offering.id,s.investor_id,s.id).clearedNet);
         const due=subscriptionDue(s,offering);
         return el('span',{class:got>=due&&due>0?'':'muted-text'},money(got));}},
       showCosts?{label:'Costs',num:true,hide:true,render:s=>s.costs_cents?money(s.costs_cents):'—'}:null,
       showCosts?{label:'Total due',num:true,render:s=>money((s.amount_committed_cents||0)+(s.costs_cents||0))}:null,
-      {label:'Units',num:true,hide:true,render:s=>s.units??'—'},
-      tranches.length?{label:'Tranche',hide:true,render:s=>trancheName(s.tranche_id)||'—'}:null,
-      {label:'Accredited',hide:true,render:s=>pill(s.accredited_status,ACCREDITED_KIND[s.accredited_status]||'muted')},
-      {label:'Signed',hide:true,render:s=>fmtDate(s.sub_signed_date)},
+      {label:'Units',num:true,hide:true,sort:s=>s.units,render:s=>s.units??'—'},
+      tranches.length?{label:'Tranche',hide:true,sort:s=>trancheName(s.tranche_id),render:s=>trancheName(s.tranche_id)||'—'}:null,
+      {label:'Accredited',hide:true,sort:s=>s.accredited_status,render:s=>pill(s.accredited_status,ACCREDITED_KIND[s.accredited_status]||'muted')},
+      {label:'Signed',hide:true,sort:s=>s.sub_signed_date,render:s=>fmtDate(s.sub_signed_date)},
       {label:'',cls:'row-actions',render:s=>rowActions(
         iconButton('edit',`Edit ${s.investor_name}'s subscription`,()=>openSubscriptionForm(offering,state.investors,s,async()=>{await reloadOffering();drawTab();})),
         iconButton('trash',`Remove ${s.investor_name} from this offering`,async()=>{
@@ -4792,21 +4963,91 @@ async function investorsTab(state,drawTab,reloadOffering){
 async function escrowTab(state,drawTab,reloadOffering){
   const{transactions,summary}=await api.listEscrow(state.offering.id);
   const addBtn=el('button',{class:'btn btn-primary',onclick:()=>openEscrowForm(state.offering.id,state.investors,null,async()=>{await reloadOffering();drawTab();})},'@icon:plus','New entry');
-  return el('div',{},
+  /* A ledger long enough to be worth keeping is too long to read.
+     The structural filters — type, cleared, date range — redraw the table,
+     because they change what the totals underneath are totals of. The text
+     search hides rows in place instead, the way the contact book already
+     does: a redraw on every keystroke takes the cursor with it.
+     All of it is held on the tab state, so toggling a clearance — which
+     redraws the tab — does not throw away the range you were looking at. */
+  if(!state.escrowFilter)state.escrowFilter={q:'',type:'',from:'',to:'',cleared:''};
+  const f=state.escrowFilter;
+  const structural=t=>{
+    if(f.type&&t.txn_type!==f.type)return false;
+    if(f.cleared==='cleared'&&!t.cleared)return false;
+    if(f.cleared==='pending'&&t.cleared)return false;
+    if(f.from&&(!t.txn_date||t.txn_date<f.from))return false;
+    if(f.to&&(!t.txn_date||t.txn_date>f.to))return false;
+    return true;
+  };
+  const shown=transactions.filter(structural);
+  const set=(k,v)=>{f[k]=v;drawTab();};
+  const searchText=t=>[t.investor_name,t.method,t.reference,t.notes,t.txn_type,
+    fmtDate(t.txn_date),centsToInput(t.amount_cents)].filter(Boolean).join(' ').toLowerCase();
+  const clearedIn=rows=>rows.filter(t=>t.cleared)
+    .reduce((a,t)=>a+(SIGN[t.txn_type]||0)*(t.amount_cents||0),0);
+  const countLine=el('div',{class:'filter-count'});
+  const tableWrap=el('div',{});
+  function updateCount(rows){
+    countLine.textContent=rows.length===transactions.length
+      ? `${transactions.length} entr${transactions.length===1?'y':'ies'}`
+      : `${rows.length} of ${transactions.length} entries · ${money(clearedIn(rows))} cleared in this selection`;
+  }
+  // Hides rows that do not match the typed text, and re-counts what is left.
+  function applySearch(){
+    const q=f.q.trim().toLowerCase();
+    const body=tableWrap.querySelector('tbody');
+    if(!body){updateCount(shown);return;}
+    const live=[];
+    for(const tr of body.rows){
+      const hit=!q||(tr.dataset.search||'').includes(q);
+      tr.style.display=hit?'':'none';
+      if(hit&&tr.dataset.idx!=null)live.push(shown[Number(tr.dataset.idx)]);
+    }
+    updateCount(live);
+    const none=tableWrap.querySelector('.filter-none');
+    if(none)none.style.display=live.length?'none':'';
+  }
+  const anyFilter=()=>!!(f.q||f.type||f.from||f.to||f.cleared);
+  const clearAll=()=>{state.escrowFilter={q:'',type:'',from:'',to:'',cleared:''};drawTab();};
+  const filterRow=transactions.length>1?el('div',{class:'filter-row'},
+    el('input',{type:'search',class:'inline-input grow',placeholder:'Search the ledger…',
+      'aria-label':'Search the escrow ledger',value:f.q,
+      oninput:e=>{f.q=e.target.value;applySearch();}}),
+    el('select',{class:'inline-input','aria-label':'Entry type',onchange:e=>set('type',e.target.value)},
+      el('option',{value:'',selected:!f.type},'Every type'),
+      ...TXN_TYPES.map(t=>el('option',{value:t.value,selected:f.type===t.value},t.label.split(' — ')[0]))),
+    el('select',{class:'inline-input','aria-label':'Cleared or pending',onchange:e=>set('cleared',e.target.value)},
+      el('option',{value:'',selected:!f.cleared},'Cleared and pending'),
+      el('option',{value:'cleared',selected:f.cleared==='cleared'},'Cleared only'),
+      el('option',{value:'pending',selected:f.cleared==='pending'},'Pending only')),
+    el('label',{class:'filter-dates'},el('span',{},'From'),
+      el('input',{type:'date',class:'inline-input date',value:f.from,onchange:e=>set('from',e.target.value)}),
+      el('span',{},'to'),
+      el('input',{type:'date',class:'inline-input date',value:f.to,onchange:e=>set('to',e.target.value)})),
+    anyFilter()?el('button',{class:'btn btn-ghost btn-sm',onclick:clearAll},'Clear'):null):null;
+
+  const view=el('div',{class:'escrow-wrap'},
     el('div',{class:'stat-row'},statCard('Cleared balance',money(summary.clearedBalance),{kind:'accent',sub:'settled at bank'}),
       statCard('Pending',money(summary.pendingBalance),{sub:'not yet cleared'}),statCard('Deposits',money(summary.deposits),{kind:'success'}),
       statCard('Out (release/refund/fee)',money(summary.releases+summary.refunds+summary.fees),{sub:`${money(summary.releases)} released`})),
     el('div',{class:'section-head'},el('h2',{},'Escrow ledger'),
       el('div',{style:'display:flex;gap:8px;flex-wrap:wrap'},
-        transactions.length?el('button',{class:'btn btn-ghost btn-sm',onclick:()=>exportEscrow(state.offering,transactions)},'@icon:download','CSV'):null,
+        shown.length?el('button',{class:'btn btn-ghost btn-sm',onclick:()=>exportEscrow(state.offering,shown)},'@icon:download','CSV'):null,
         addBtn)),
+    filterRow,
+    transactions.length?countLine:null,
     !transactions.length?emptyState('No escrow activity recorded yet.'):
-    dataTable([
-      {label:'Entry',primary:true,render:t=>[
+    !shown.length?emptyState('Nothing in the ledger matches that.',
+      el('button',{class:'btn btn-ghost',onclick:clearAll},'Clear the filter')):
+    tableWrap);
+  if(shown.length){
+    tableWrap.appendChild(dataTable([
+      {label:'Entry',primary:true,sort:t=>t.investor_name,render:t=>[
         el('span',{},t.investor_name||(t.txn_type==='release'?'Release to issuer':t.txn_type==='fee'?'Fee or expense':'—')),
         el('div',{class:'cell-sub'},fmtDate(t.txn_date))]},
-      {label:'Date',hide:true,render:t=>fmtDate(t.txn_date)},
-      {label:'Type',render:t=>pill(t.txn_type.charAt(0).toUpperCase()+t.txn_type.slice(1),TXN_KIND[t.txn_type]||'muted')},
+      {label:'Date',hide:true,sort:t=>t.txn_date,render:t=>fmtDate(t.txn_date)},
+      {label:'Type',sort:t=>t.txn_type,render:t=>pill(t.txn_type.charAt(0).toUpperCase()+t.txn_type.slice(1),TXN_KIND[t.txn_type]||'muted')},
       {label:'Method / ref',hide:true,render:t=>[t.method,t.reference?el('span',{class:'mono'},t.reference):null].filter(Boolean).length
         ?[t.method||'',t.method&&t.reference?' · ':'',t.reference?el('span',{class:'mono'},t.reference):null]:'—'},
       {label:'Cleared',render:t=>el('button',{class:`clear-toggle ${t.cleared?'on':''}`,type:'button',
@@ -4817,28 +5058,47 @@ async function escrowTab(state,drawTab,reloadOffering){
             amount:(t.amount_cents/100).toFixed(2),txn_date:t.txn_date,method:t.method,reference:t.reference,
             cleared:!t.cleared,notes:t.notes});
           await reloadOffering();drawTab();}},t.cleared?'Cleared':'Pending')},
-      {label:'Amount',num:true,render:t=>{const outbound=t.txn_type!=='deposit';
+      // Sorted by what the entry does to the balance, so the biggest movements
+      // gather at one end rather than deposits and refunds interleaving.
+      {label:'Amount',num:true,sort:t=>(SIGN[t.txn_type]||0)*(t.amount_cents||0),
+        render:t=>{const outbound=t.txn_type!=='deposit';
         return el('span',{class:outbound?'neg':'pos'},(outbound?'\u2212':'+')+money(t.amount_cents));}},
       {label:'',cls:'row-actions',render:t=>rowActions(
         iconButton('edit','Edit this entry',()=>openEscrowForm(state.offering.id,state.investors,t,async()=>{await reloadOffering();drawTab();})),
         iconButton('trash','Delete this entry',async()=>{const ok=await confirmDialog('Delete this escrow entry?',{danger:true,confirmLabel:'Delete'});
           if(!ok)return;await api.deleteEscrow(t.id);toast('Deleted.','success');await reloadOffering();drawTab();},{danger:true}))}
-    ],transactions,{caption:'Escrow ledger'}));
+    ],shown,{caption:'Escrow ledger',
+      // The row carries what a search should look at, and where it sits, so
+      // the count can be recomputed without rebuilding the table.
+      rowAttrs:(t,i)=>({dataset:{search:searchText(t),idx:String(i)}})}));
+    tableWrap.appendChild(el('div',{class:'empty filter-none',style:'display:none'},
+      el('p',{},'Nothing in this selection matches what you typed.')));
+    applySearch();
+  }else updateCount(shown);
+  return view;
 }
-async function checklistTab(state){
+async function checklistTab(state,drawTab,reloadOffering){
   const tasks=await api.listTasks(state.offering.id);
   const list=el('ul',{class:'checklist'});
   const countLabel=el('span',{class:'count-label'},`${tasks.filter(t=>t.done).length}/${tasks.length} complete`);
   function updateCount(items){countLabel.textContent=`${items.filter(x=>x.done).length}/${items.length} complete`;}
   function drawList(items){clear(list);items.forEach(t=>list.appendChild(taskRow(t,items)));}
   function taskRow(t,items){
+    // Resolved at read time, exactly as the inheritance cascade resolves
+    // everything else: a date the offering implies is not copied onto the
+    // step, so moving the close date moves every step that followed from it.
+    const implied=!t.due_date&&!t.done?impliedDue(state.offering,t):null;
+    const overdue=d=>d&&daysUntil(d)<0;
     return el('li',{class:'check-item'+(t.done?' done':'')},
       el('label',{class:'check-label'},el('input',{type:'checkbox',checked:!!t.done,onchange:async e=>{
         await api.updateTask(t.id,{done:e.target.checked,done_date:e.target.checked?todayISO():null});t.done=e.target.checked?1:0;
         e.target.closest('.check-item').classList.toggle('done',!!t.done);updateCount(items);}}),el('span',{class:'check-text'},t.label)),
       el('div',{class:'check-right'},
         t.done&&t.done_date?el('span',{class:'check-due'},'Done '+fmtDate(t.done_date)):null,
-        t.due_date&&!t.done?el('span',{class:'check-due'},'Due '+fmtDate(t.due_date)):null,
+        t.due_date&&!t.done?el('span',{class:'check-due'+(overdue(t.due_date)?' overdue':'')},'Due '+fmtDate(t.due_date)):null,
+        implied?el('span',{class:'check-due implied'+(overdue(implied[0])?' overdue':''),
+          title:`Worked out from ${implied[1]}. Type a date to override it.`},
+          'Due '+fmtDate(implied[0])):null,
         el('button',{class:'icon-btn danger',title:'Delete step',onclick:async()=>{await api.deleteTask(t.id);const i=items.indexOf(t);if(i>=0)items.splice(i,1);drawList(items);updateCount(items);}},'@icon:trash')));
   }
   const newInput=el('input',{class:'inline-input',placeholder:'Add a step…',type:'text'});
@@ -4849,6 +5109,8 @@ async function checklistTab(state){
   newInput.addEventListener('keydown',e=>{if(e.key==='Enter')addTask();});
   drawList(tasks);
   return el('section',{class:'panel'},el('div',{class:'section-head'},el('h2',{},'Process checklist'),countLabel),list,
+    el('p',{class:'field-help',style:'margin:12px 0 0'},
+      'A date in lighter type is one the offering already implies — the Form D window, the close dates — and it moves when the offering does. Type a date on a step to fix it instead.'),
     el('div',{class:'add-task-row'},newInput,dueInput,el('button',{class:'btn btn-primary btn-sm',onclick:addTask},'Add step')));
 }
 /* ---- Distributions -------------------------------------------------------
@@ -5618,13 +5880,15 @@ function certClassPanel(cls,certs,offering,investors,classNames){
       el('span',{class:'muted-text',style:'font-weight:400;font-size:13px'},
         `  ·  ${certs.length} certificate${certs.length===1?'':'s'} · ${money(cap)}`+(classTotal!=null?` · class = ${fmtRate(classTotal)} of company`:''))),
     dataTable([
-      {label:'Holder',primary:true,render:c=>[
+      {label:'Holder',primary:true,sort:c=>c.holder_name,render:c=>[
         el('span',{},c.holder_name||'—'),
         el('div',{class:'cell-sub'},'Certificate ',el('span',{class:'mono'},c.cert_number))]},
+      // Deliberately not sortable: certificates run in funding-date sequence,
+      // and re-ordering the column would read as a renumbering.
       {label:'Cert #',hide:true,cls:'mono',render:c=>c.cert_number},
-      {label:'Capital',num:true,render:c=>c.capital_cents!=null?money(c.capital_cents):'—'},
-      {label:'% of class',num:true,render:c=>fmtPct(c.pct_of_class_shown)},
-      {label:'Total %',num:true,render:c=>fmtPct(c.total_pct_shown)},
+      {label:'Capital',num:true,sort:c=>c.capital_cents,render:c=>c.capital_cents!=null?money(c.capital_cents):'—'},
+      {label:'% of class',num:true,sort:c=>c.pct_of_class_shown,render:c=>fmtPct(c.pct_of_class_shown)},
+      {label:'Total %',num:true,sort:c=>c.total_pct_shown,render:c=>fmtPct(c.total_pct_shown)},
       {label:'Pref rate',num:true,hide:true,render:c=>c.pref_return_rate!=null?fmtRate(c.pref_return_rate):'—'},
       {label:'Accrued',num:true,hide:anyPaid,render:c=>c.accrued_calc!=null?money(c.accrued_calc):'—'},
       anyPaid?{label:'Paid',num:true,render:c=>c.pref_paid_cents?money(c.pref_paid_cents):'—'}:null,
@@ -5714,6 +5978,7 @@ async function renderInvestors(){
   const investors=await api.listInvestors();
   const addBtn=el('button',{class:'btn btn-primary',onclick:()=>openInvestorForm(null,i=>navigate(`/investors/${i.id}`))},'@icon:plus','New investor');
   const csvBtn=investors.length?el('button',{class:'btn btn-ghost',onclick:()=>exportContacts(investors)},'@icon:download','CSV'):null;
+  const importBtn=el('button',{class:'btn btn-ghost',onclick:()=>openContactImport(()=>refresh())},'@icon:upload','Paste a list');
   // Group into sections by investor type; individuals shown Last, First M.
   const groups=new Map();
   for(const i of investors){const k=i.entity_type||'Other';if(!groups.has(k))groups.set(k,[]);groups.get(k).push(i);}
@@ -5725,14 +5990,15 @@ async function renderInvestors(){
       el('div',{class:'section-head',style:'margin-top:0'},
         el('h2',{},type,el('span',{class:'muted-text',style:'font-weight:400;font-size:13px'},`  ·  ${rows.length}`))),
       dataTable([
-        {label:'Name',primary:true,render:i=>[
+        {label:'Name',primary:true,sort:i=>investorSortKey(i),render:i=>[
           el('span',{class:'link'},investorListName(i)),
           i.contact_name?el('div',{class:'cell-sub'},i.contact_name):null]},
-        {label:'Accredited',render:i=>pill(i.accredited_status,ACCREDITED_KIND[i.accredited_status]||'muted')},
-        {label:'Email',render:i=>i.email||'—'},
+        {label:'Accredited',sort:i=>i.accredited_status,render:i=>pill(i.accredited_status,ACCREDITED_KIND[i.accredited_status]||'muted')},
+        {label:'Email',sort:i=>i.email,render:i=>i.email||'—'},
         {label:'Phone',hide:true,render:i=>i.phone||'—'},
+        {label:'State',hide:true,sort:i=>investorState(i),render:i=>investorState(i)||'—'},
         {label:'SSN / EIN',hide:true,cls:'mono',render:i=>fmtTaxId(i.tax_id)},
-        {label:'Offerings',num:true,render:i=>String(i.offering_count)}
+        {label:'Offerings',num:true,sort:i=>i.offering_count,render:i=>String(i.offering_count)}
       ],rows,{caption:`${type} contacts`,className:'hover',
         rowAttrs:i=>({
           // The search filter reads this. It is the display name only — an
@@ -5752,8 +6018,11 @@ async function renderInvestors(){
           const show=!q||(tr.dataset.search||'').includes(q);
           tr.style.display=show?'':'none';if(show)any=true;});
         sec.style.display=any?'':'none';});}});
-  return el('div',{},pageHeader('Investors',{subtitle:`${investors.length} contact${investors.length===1?'':'s'} in your contact book`,actions:[csvBtn,addBtn],inBar:true}),
-    !investors.length?emptyState('No investors yet.',el('button',{class:'btn btn-primary',onclick:()=>openInvestorForm(null,i=>navigate(`/investors/${i.id}`))},'Add your first investor')):
+  return el('div',{},pageHeader('Investors',{subtitle:`${investors.length} contact${investors.length===1?'':'s'} in your contact book`,actions:[importBtn,csvBtn,addBtn],inBar:true}),
+    !investors.length?emptyState('No investors yet. Add them one at a time, or paste a list if you are bringing an existing deal in.',
+      el('div',{style:'display:flex;gap:8px;justify-content:center;flex-wrap:wrap'},
+        el('button',{class:'btn btn-primary',onclick:()=>openInvestorForm(null,i=>navigate(`/investors/${i.id}`))},'Add your first investor'),
+        el('button',{class:'btn btn-ghost',onclick:()=>openContactImport(()=>refresh())},'Paste a list'))):
     el('div',{},el('div',{class:'toolbar'},search),sections));
 }
 async function renderInvestor(id){
@@ -6158,6 +6427,194 @@ function buildInvestorStatement(inv){
     el('div',{class:'report-foot'},
       (cfg.firm_name?`Prepared by ${cfg.firm_name}. `:''),
       (cfg.report_footer||DEFAULT_REPORT_FOOTER)));
+}
+
+/* ============================================================================
+   WHAT NEEDS ATTENTION
+
+   The pieces existed and were scattered: upcoming closings on the dashboard,
+   stale deposits and past deadlines inside the suggestion strip, overdue
+   checklist steps nowhere at all. This gathers everything that carries a date
+   across every offering, in date order — the screen a practice opens on a
+   Monday morning.
+
+   Nothing here is a suggestion: a suggestion proposes a change to the record,
+   and these are simply things that fall due.
+   ========================================================================== */
+function attentionItems(){
+  const out=[];
+  const today=todayISO();
+  const add=(date,kind,title,detail,offeringId)=>{
+    if(!date)return;
+    out.push({date,kind,title,detail,offeringId,days:daysUntil(date)});
+  };
+  for(const o of db.offerings){
+    if(['Closed','Terminated'].includes(o.status))continue;
+    const fd=formDPosition(o);
+    if(fd&&fd.due&&!fd.filed)
+      add(fd.due,'Form D',`File Form D on ${o.name}`,
+        `Fifteen days from the first sale on ${fmtDate(fd.firstSale)}.`,o.id);
+    if(fd&&fd.amendmentDue)
+      add(fd.amendmentDue,'Form D',`Form D amendment on ${o.name}`,
+        `A year from the filing recorded on ${fmtDate(fd.filed)}.`,o.id);
+    if(o.final_close_date)
+      add(o.final_close_date,'Closing',`${o.name} reaches its final close deadline`,
+        (()=>{const s=offeringSummary(o);
+          return s.minRaiseMet?'The minimum raise has been met.'
+            :`${money(o.target_min_cents-s.escrow.clearedNetDeposits)} short of the minimum.`;})(),o.id);
+    for(const t of db.tasks.filter(t=>t.offering_id===o.id&&!t.done)){
+      const due=t.due_date?[t.due_date,'entered on the step']:impliedDue(o,t);
+      if(due)add(due[0],'Checklist',`${t.label} — ${o.name}`,
+        t.due_date?'From the checklist.':`Worked out from ${due[1]}.`,o.id);
+    }
+    for(const c of db.capital_calls.filter(c=>c.offering_id===o.id&&c.due_date))
+      add(c.due_date,'Capital call',`${c.label} falls due on ${o.name}`,
+        `${money((c.allocations||[]).reduce((a,x)=>a+(x.amount_cents||0),0))} called.`,o.id);
+    // Deposits that have sat pending long enough to be worth chasing.
+    const stale=db.escrow.filter(e=>e.offering_id===o.id&&e.txn_type==='deposit'&&!e.cleared
+      &&e.txn_date&&daysUntil(e.txn_date)<-10);
+    if(stale.length)add(stale.map(e=>e.txn_date).sort()[0],'Escrow',
+      `${stale.length} deposit${stale.length===1?'':'s'} still pending on ${o.name}`,
+      `${money(stale.reduce((a,e)=>a+(e.amount_cents||0),0))} is excluded from the cleared balance until it settles.`,o.id);
+  }
+  out.sort((a,b)=>String(a.date).localeCompare(String(b.date)));
+  return{items:out,today,
+    overdue:out.filter(x=>x.days<0),
+    soon:out.filter(x=>x.days>=0&&x.days<=14),
+    later:out.filter(x=>x.days>14)};
+}
+function attentionPanel(){
+  const{items,overdue,soon}=attentionItems();
+  if(!items.length)return null;
+  const shownItems=[...overdue,...soon];
+  if(!shownItems.length)return null;
+  const KIND_PILL={'Form D':'info','Closing':'warn','Checklist':'default','Capital call':'info','Escrow':'muted'};
+  return el('section',{class:'panel attention'},
+    el('div',{class:'section-head',style:'margin-top:0'},
+      el('div',{},el('h2',{},'Needs attention'),
+        el('div',{class:'section-figures'},
+          overdue.length?el('span',{class:'urgent-text'},el('strong',{},String(overdue.length)),' overdue'):null,
+          soon.length?el('span',{},el('strong',{},String(soon.length)),' within a fortnight'):null))),
+    el('ul',{class:'attention-list'},...shownItems.map(x=>
+      el('li',{class:'attention-item'+(x.days<0?' overdue':''),tabindex:'0',role:'link',
+        onclick:()=>x.offeringId&&navigate(`/offerings/${x.offeringId}`),
+        onkeydown:e=>{if((e.key==='Enter'||e.key===' ')&&x.offeringId){e.preventDefault();navigate(`/offerings/${x.offeringId}`);}}},
+        el('span',{class:'attention-when'},fmtDate(x.date),
+          el('span',{class:'attention-rel'},relDays(x.days))),
+        el('span',{class:'attention-main'},
+          el('span',{class:'attention-title'},x.title),
+          el('span',{class:'attention-detail'},x.detail)),
+        pill(x.kind,KIND_PILL[x.kind]||'default')))));
+}
+
+/* ============================================================================
+   BRINGING AN EXISTING DEAL IN
+
+   Adopting the app for a live offering meant twenty subscribers entered
+   through twenty modal dialogs — a cost paid at exactly the moment a new user
+   is deciding whether the app is worth it.
+
+   Paste a block instead. One holder per line; a comma, tab or semicolon
+   separates the fields. What the app makes of each line is shown before
+   anything is written, because a name split the wrong way is worse than a
+   name not entered.
+   ========================================================================== */
+// Columns are recognised by what they look like rather than by position, so a
+// pasted spreadsheet does not have to be rearranged first.
+function readContactLine(line){
+  const parts=line.split(/[\t;,]/).map(x=>x.trim()).filter((x,i,a)=>x!==''||i<a.length-1);
+  const out={raw:line,email:null,phone:null,state:null,tax_id:null,name:null,notes:[]};
+  const rest=[];
+  for(const p of parts){
+    if(!p)continue;
+    if(!out.email&&/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(p)){out.email=p;continue;}
+    if(!out.tax_id&&/^\d{3}-?\d{2}-?\d{4}$|^\d{2}-?\d{7}$/.test(p)){out.tax_id=p;continue;}
+    if(!out.phone&&/^[+(]?[\d][\d\s().-]{6,}$/.test(p)){out.phone=p;continue;}
+    if(!out.state&&US_STATES.includes(p.toUpperCase())&&p.length===2){out.state=p.toUpperCase();continue;}
+    rest.push(p);
+  }
+  out.name=rest.shift()||null;
+  out.notes=rest;
+  if(!out.name)return null;
+  const entity_type=guessEntityType(out.name);
+  const body=isPersonType(entity_type)?{entity_type,...splitPersonName(out.name)}:{entity_type,name:out.name};
+  return{...out,entity_type,body:{...body,email:out.email,phone:out.phone,state:out.state,tax_id:out.tax_id,
+    notes:out.notes.length?out.notes.join(' · '):null}};
+}
+function parseContactBlock(text){
+  return String(text||'').split(/\r?\n/).map(l=>l.trim()).filter(Boolean)
+    .map(readContactLine).filter(Boolean);
+}
+// A contact already on file, matched the way the duplicate check matches them.
+function existingContact(row){
+  const email=row.email&&String(row.email).toLowerCase();
+  const tax=row.tax_id&&String(row.tax_id).replace(/\D/g,'');
+  return db.investors.find(i=>
+    (email&&String(i.email||'').toLowerCase()===email)||
+    (tax&&String(i.tax_id||'').replace(/\D/g,'')===tax)||
+    (row.body.name&&String(i.name||'').toLowerCase()===String(row.body.name).toLowerCase())||
+    (row.body.last_name&&String(i.last_name||'').toLowerCase()===String(row.body.last_name||'').toLowerCase()
+      &&String(i.first_name||'').toLowerCase()===String(row.body.first_name||'').toLowerCase()))||null;
+}
+function openContactImport(onDone){
+  const input=el('textarea',{class:'inline-input',rows:7,
+    placeholder:'Jane Q Public, jane@example.com, MI\nAcme Holdings LLC, 38-1234567, contact@acme.test\nRooke Family Trust, OH'});
+  const preview=el('div',{});
+  const errorBox=el('div',{class:'form-error',style:'display:none'});
+  let rows=[];
+  function redraw(){
+    rows=parseContactBlock(input.value);
+    // Matched against the book here, and only here: doing it in the input
+    // handler and re-parsing in redraw threw the matches away again.
+    rows.forEach(r=>{r.existing=existingContact(r);});
+    clear(preview);
+    if(!rows.length){
+      preview.appendChild(el('p',{class:'field-help'},'Paste one holder per line. Fields may be separated by commas, tabs or semicolons, in any order — an email, a taxpayer number, a telephone number and a two-letter state are recognised by their shape, and whatever is left is the name.'));
+      return;
+    }
+    const dupes=rows.filter(r=>r.existing).length;
+    preview.appendChild(dataTable([
+      {label:'Name',primary:true,render:r=>[
+        el('span',{},r.existing?investorDisplayName(r.existing):(isPersonType(r.entity_type)
+          ?[r.body.first_name,r.body.middle_name,r.body.last_name].filter(Boolean).join(' ')
+          :r.body.name)),
+        el('div',{class:'cell-sub'},r.existing?'Already in the contact book — will be left alone':r.entity_type)]},
+      {label:'Email',hide:true,render:r=>r.email||'—'},
+      {label:'Phone',hide:true,render:r=>r.phone||'—'},
+      {label:'State',render:r=>r.state||'—'},
+      {label:'SSN / EIN',hide:true,cls:'mono',render:r=>r.tax_id?fmtTaxId(r.tax_id):'—'},
+      {label:'',render:r=>r.existing?pill('Existing','muted'):pill('New','success')}
+    ],rows,{caption:'What will be added'}));
+    preview.appendChild(el('p',{class:'field-help',style:'margin:10px 0 0'},
+      `${rows.length-dupes} to add`+(dupes?`, ${dupes} already on file and left alone`:'')
+      +'. A name that looks like an entity is filed as one; a personal name is split into first, middle and last. Correct anything afterwards on the contact itself.'));
+  }
+  input.addEventListener('input',redraw);
+  redraw();
+  const submit=el('button',{class:'btn btn-primary',type:'submit'},'Add them');
+  const form=el('form',{class:'modal-body form-grid',onsubmit:async e=>{
+    e.preventDefault();errorBox.style.display='none';
+    const fresh=rows.filter(r=>!r.existing);
+    if(!fresh.length){errorBox.textContent='Nothing here to add.';errorBox.style.display='';return;}
+    submit.disabled=true;submit.textContent='Adding…';
+    let made=0,failed=0;
+    for(const r of fresh){
+      try{await api.createInvestor(r.body);made++;}catch{failed++;}
+    }
+    closeModal();
+    toast(failed?`${made} added; ${failed} could not be.`:`${made} contact${made===1?'':'s'} added.`,
+      failed?'error':'success');
+    onDone?.();
+  }},
+    errorBox,
+    el('div',{class:'form-row'},el('label',{for:'import-block'},'One holder per line'),input),
+    el('div',{class:'form-row'},preview),
+    el('div',{class:'modal-actions'},
+      el('button',{class:'btn btn-ghost',type:'button',onclick:closeModal},'Cancel'),
+      submit));
+  input.id='import-block';
+  openShell('Add several contacts at once',form,{wide:true});
+  setTimeout(()=>input.focus(),40);
 }
 
 /* ============================================================================
