@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Muniment</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect x='6' y='9' width='12' height='32' fill='%2314453F'/><rect x='26' y='25' width='12' height='16' fill='%2314453F'/><rect x='46' y='9' width='12' height='32' fill='%2314453F'/><rect x='6' y='45' width='52' height='10' fill='%23A8813C'/></svg>" />
+<meta name="color-scheme" content="light dark" />
+<meta name="description" content="Muniment — the system of record for private offerings. Runs entirely on this computer; nothing is transmitted." />
+<!-- The browser chrome takes the sidebar green in light, the page ground in dark. -->
+<meta name="theme-color" content="#14453F" media="(prefers-color-scheme: light)" />
+<meta name="theme-color" content="#0B1113" media="(prefers-color-scheme: dark)" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="Muniment" />
+<link rel="apple-touch-icon" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAALQAAAC0CAYAAAA9zQYyAAACuklEQVR42u3csY3CQBRF0SmCfog2pzjqoSeCJWW1AQkSBLaEh+tj6aZIf96JGWPi7/BzvGu+hg9Y4AEW4BALbpAFNsjKwzaQEqiNogxsQyiD2gBKoPboysD20Mqg9sDKoPawSqH2qMqA9qDKoPaQyqD2gEqh9njKgPZwyqD2YEqh9ljKgPZQSqH2SMqA9kBKoV76g7ff6xQZd5/7Aa0+6D0/CNDfvx/QAhpooIEGGuhPg/YgQBf2A1pAAw000EADDTTQQAMtoIEGGmiggZ4TtAdRaT+gBTTQQAMNNNBAAw000ALagwANNNBAAw000EADDTTQAtqDAA000EADDTTQQAMNNNACGmiggQYaaKCBBhpooIEGWkADDTTQQAMNNNBAAw000EALaKCBBhpooIEGGmiggbYf0AJ6x6DdB7TB3Qe0wd0HtMHdB7T7gDa4+4A2uPuANrj7gDa4+4B2H9AGdx/QBncf0AZ3H9AGB9qDuA9og7sPaIO7D2iDuw9ogwPtQdwHtMHdB7TB3Qe0wd0HtMGBNrj7gDa4+4A2uPuANrj7gHYf0AZ3H9AGdx/QBncf0AZ3H9DuA9rg7gPa4O4D2uDuA9rg7gPafUAb3H1AG9x9QBvcfUAb3H1Auw9og7tvF6ClWQJaQEtAS0BLQAtoCWgJaAloCWgBLQF9vF/OJ2l1QAtooAU00AJaAlpAAy2ggRbQQAtoCWgBDbSABlpAA615Qf9/QKsAejw+oAU00AJaAlpAAy2ggRbQQGs60GtRG0Nbgx7PH9ACGmgBLX0A9BrUxtCWoMerD2gBLW39B43vPg+kDGaglQMNtVKYgVYONNRKYYZaOcxAKwcaaqUwQ60cZqiVwwy0cqChVgoz1Mphhlo5zGArBxlqJTFDrRxmsJWDDLWSmMFWDjLYSkKGW0nEgAPsAx7Yhd8fkud7TVbglWQAAAAASUVORK5CYII=" />
+<!-- Both of these only take effect when the file is served over http(s); from
+     a local file:// they are inert and harmless. -->
+<link rel="manifest" href="data:application/manifest+json,%7B%22name%22%3A%22Muniment%22%2C%22short_name%22%3A%22Muniment%22%2C%22description%22%3A%22The%20system%20of%20record%20for%20private%20offerings.%22%2C%22display%22%3A%22standalone%22%2C%22orientation%22%3A%22any%22%2C%22background_color%22%3A%22%23F6F5F1%22%2C%22theme_color%22%3A%22%2314453F%22%2C%22start_url%22%3A%22.%22%7D" />
+<script>/* Set the theme before first paint so there is no flash. */
+try{var _t=localStorage.getItem('muniment:theme');document.documentElement.setAttribute('data-theme',_t==='dark'?'dark':'light');}catch(e){document.documentElement.setAttribute('data-theme','light');}</script>
+<style>
+/*{{ style }}*/
+</style>
+</head>
+<body>
+<a class="skip-link" href="#view">Skip to the record</a>
+<!-- Shown only below 640px; the sidebar takes over above it. -->
+<header class="app-bar">
+  <span class="app-bar-mark"><svg viewBox="0 0 64 64" aria-hidden="true"><rect x="6" y="9" width="12" height="32" rx="1.5"/><rect x="26" y="25" width="12" height="16" rx="1.5"/><rect x="46" y="9" width="12" height="32" rx="1.5"/><rect class="base" x="6" y="45" width="52" height="10" rx="1.5"/></svg></span>
+  <h1 class="app-bar-title" id="app-bar-title">Dashboard</h1>
+  <button class="app-bar-btn" id="app-search" type="button" aria-label="Search and commands"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M7.1 1.6a5.5 5.5 0 0 1 4.3 8.93l3.03 3.04a.75.75 0 1 1-1.06 1.06l-3.04-3.03A5.5 5.5 0 1 1 7.1 1.6Zm0 1.5a4 4 0 1 0 0 8 4 4 0 0 0 0-8Z"/></svg></button>
+  <button class="app-bar-btn" id="app-more" type="button" aria-label="More"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2.4 4.2h11.2a.75.75 0 0 0 0-1.5H2.4a.75.75 0 0 0 0 1.5Zm0 4.55h11.2a.75.75 0 0 0 0-1.5H2.4a.75.75 0 1 0 0 1.5Zm0 4.55h11.2a.75.75 0 0 0 0-1.5H2.4a.75.75 0 1 0 0 1.5Z"/></svg></button>
+</header>
+<div id="app">
+  <aside class="sidebar">
+    <div class="brand"><svg class="brand-mark" viewBox="0 0 64 64" aria-hidden="true"><rect x="6" y="9" width="12" height="32" rx="1.5"/><rect x="26" y="25" width="12" height="16" rx="1.5"/><rect x="46" y="9" width="12" height="32" rx="1.5"/><rect class="base" x="6" y="45" width="52" height="10" rx="1.5"/></svg><span class="brand-name">Muniment</span></div>
+    <div class="brand-tag">Record of private offerings</div>
+    <div class="global-add-wrap"><button id="global-add" class="global-add" type="button"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2.1a.8.8 0 0 1 .8.8v4.3h4.3a.8.8 0 0 1 0 1.6H8.8v4.3a.8.8 0 0 1-1.6 0V8.8H2.9a.8.8 0 0 1 0-1.6h4.3V2.9a.8.8 0 0 1 .8-.8Z"/></svg>New record</button></div>
+    <nav class="nav">
+      <a data-nav="dashboard" href="#/" tabindex="0"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 2.9a.9.9 0 0 1 .9-.9h3.4a.9.9 0 0 1 .9.9v3.4a.9.9 0 0 1-.9.9H2.9a.9.9 0 0 1-.9-.9V2.9Zm6.8 0a.9.9 0 0 1 .9-.9h3.4a.9.9 0 0 1 .9.9v1.8a.9.9 0 0 1-.9.9H9.7a.9.9 0 0 1-.9-.9V2.9ZM2 9.7a.9.9 0 0 1 .9-.9h3.4a.9.9 0 0 1 .9.9v3.4a.9.9 0 0 1-.9.9H2.9a.9.9 0 0 1-.9-.9V9.7Zm6.8-2a.9.9 0 0 1 .9-.9h3.4a.9.9 0 0 1 .9.9v5.4a.9.9 0 0 1-.9.9H9.7a.9.9 0 0 1-.9-.9V7.7Z"/></svg><span>Dashboard</span></a>
+      <a data-nav="offerings" href="#/offerings" tabindex="0"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3.1 1.9h9.8a1.2 1.2 0 0 1 1.2 1.2v9.8a1.2 1.2 0 0 1-1.2 1.2H3.1a1.2 1.2 0 0 1-1.2-1.2V3.1a1.2 1.2 0 0 1 1.2-1.2Zm.3 1.5v9.2h9.2V3.4H3.4Zm1.7 1.9h5.8a.65.65 0 0 1 0 1.3H5.1a.65.65 0 1 1 0-1.3Zm0 2.6h5.8a.65.65 0 0 1 0 1.3H5.1a.65.65 0 0 1 0-1.3Zm0 2.6h3.3a.65.65 0 0 1 0 1.3H5.1a.65.65 0 0 1 0-1.3Z"/></svg><span>Offerings</span></a>
+      <a data-nav="investors" href="#/investors" tabindex="0"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 2.1a2.8 2.8 0 1 1 0 5.6 2.8 2.8 0 0 1 0-5.6Zm0 1.4a1.4 1.4 0 1 0 0 2.8 1.4 1.4 0 0 0 0-2.8Zm5.6-.6a2.2 2.2 0 1 1 0 4.4 2.2 2.2 0 0 1 0-4.4Zm0 1.4a.8.8 0 1 0 0 1.6.8.8 0 0 0 0-1.6ZM1.4 12.4c0-2 2.1-3.3 4.6-3.3s4.6 1.3 4.6 3.3v.9a.6.6 0 0 1-.6.6H2a.6.6 0 0 1-.6-.6v-.9Zm1.4.1v.1h6.4v-.1c0-1-1.4-1.9-3.2-1.9s-3.2.9-3.2 1.9Zm8.7-3.4c2 .1 3.5 1.2 3.5 2.9v1a.6.6 0 0 1-.6.6h-2.3v-1.3h1.5v-.3c0-.8-1-1.5-2.4-1.6l.3-1.3Z"/></svg><span>Investors</span></a>
+      <a data-nav="settings" href="#/settings" tabindex="0"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 5.4a2.6 2.6 0 1 0 0 5.2 2.6 2.6 0 0 0 0-5.2Zm0 1.4a1.2 1.2 0 1 1 0 2.4 1.2 1.2 0 0 1 0-2.4Zm-1-5.2h2a.7.7 0 0 1 .69.57l.2 1.05c.32.12.62.28.9.47l1-.36a.7.7 0 0 1 .84.31l1 1.73a.7.7 0 0 1-.15.88l-.81.69a4.9 4.9 0 0 1 0 1.04l.81.69a.7.7 0 0 1 .15.88l-1 1.73a.7.7 0 0 1-.84.31l-1-.36c-.28.19-.58.35-.9.47l-.2 1.05a.7.7 0 0 1-.69.57H7a.7.7 0 0 1-.69-.57l-.2-1.05a4.8 4.8 0 0 1-.9-.47l-1 .36a.7.7 0 0 1-.84-.31l-1-1.73a.7.7 0 0 1 .15-.88l.81-.69a4.9 4.9 0 0 1 0-1.04l-.81-.69a.7.7 0 0 1-.15-.88l1-1.73a.7.7 0 0 1 .84-.31l1 .36c.28-.19.58-.35.9-.47l.2-1.05A.7.7 0 0 1 7 1.6Z"/></svg><span>Settings</span></a>
+    </nav>
+    <div class="sidebar-footer">
+      <div class="theme-row">
+        <span class="theme-lbl">Appearance</span>
+        <button id="theme-toggle" class="theme-btn" type="button" aria-pressed="false">Light</button>
+      </div>
+      <div class="file-status" id="file-status"></div>
+    </div>
+  </aside>
+  <main class="content" id="view" tabindex="-1"></main>
+</div>
+<!-- Shown only below 640px. data-nav matches the sidebar so one router line
+     lights whichever navigation is on screen. -->
+<nav class="bottom-nav" aria-label="Main">
+  <a class="bn-item" data-nav="dashboard" href="#/"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 2.9a.9.9 0 0 1 .9-.9h3.4a.9.9 0 0 1 .9.9v3.4a.9.9 0 0 1-.9.9H2.9a.9.9 0 0 1-.9-.9V2.9Zm6.8 0a.9.9 0 0 1 .9-.9h3.4a.9.9 0 0 1 .9.9v1.8a.9.9 0 0 1-.9.9H9.7a.9.9 0 0 1-.9-.9V2.9ZM2 9.7a.9.9 0 0 1 .9-.9h3.4a.9.9 0 0 1 .9.9v3.4a.9.9 0 0 1-.9.9H2.9a.9.9 0 0 1-.9-.9V9.7Zm6.8-2a.9.9 0 0 1 .9-.9h3.4a.9.9 0 0 1 .9.9v5.4a.9.9 0 0 1-.9.9H9.7a.9.9 0 0 1-.9-.9V7.7Z"/></svg><span>Dashboard</span></a>
+  <a class="bn-item" data-nav="offerings" href="#/offerings"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3.1 1.9h9.8a1.2 1.2 0 0 1 1.2 1.2v9.8a1.2 1.2 0 0 1-1.2 1.2H3.1a1.2 1.2 0 0 1-1.2-1.2V3.1a1.2 1.2 0 0 1 1.2-1.2Zm.3 1.5v9.2h9.2V3.4H3.4Zm1.7 1.9h5.8a.65.65 0 0 1 0 1.3H5.1a.65.65 0 1 1 0-1.3Zm0 2.6h5.8a.65.65 0 0 1 0 1.3H5.1a.65.65 0 0 1 0-1.3Zm0 2.6h3.3a.65.65 0 0 1 0 1.3H5.1a.65.65 0 0 1 0-1.3Z"/></svg><span>Offerings</span></a>
+  <div class="bn-item bn-add"><button class="bn-add-btn" id="bottom-add" type="button" aria-label="New record"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2.1a.8.8 0 0 1 .8.8v4.3h4.3a.8.8 0 0 1 0 1.6H8.8v4.3a.8.8 0 0 1-1.6 0V8.8H2.9a.8.8 0 0 1 0-1.6h4.3V2.9a.8.8 0 0 1 .8-.8Z"/></svg></button></div>
+  <a class="bn-item" data-nav="investors" href="#/investors"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 2.1a2.8 2.8 0 1 1 0 5.6 2.8 2.8 0 0 1 0-5.6Zm0 1.4a1.4 1.4 0 1 0 0 2.8 1.4 1.4 0 0 0 0-2.8Zm5.6-.6a2.2 2.2 0 1 1 0 4.4 2.2 2.2 0 0 1 0-4.4Zm0 1.4a.8.8 0 1 0 0 1.6.8.8 0 0 0 0-1.6ZM1.4 12.4c0-2 2.1-3.3 4.6-3.3s4.6 1.3 4.6 3.3v.9a.6.6 0 0 1-.6.6H2a.6.6 0 0 1-.6-.6v-.9Zm1.4.1v.1h6.4v-.1c0-1-1.4-1.9-3.2-1.9s-3.2.9-3.2 1.9Zm8.7-3.4c2 .1 3.5 1.2 3.5 2.9v1a.6.6 0 0 1-.6.6h-2.3v-1.3h1.5v-.3c0-.8-1-1.5-2.4-1.6l.3-1.3Z"/></svg><span>Investors</span></a>
+  <button class="bn-item" id="bottom-more" type="button"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3.2 6.4a1.6 1.6 0 1 1 0 3.2 1.6 1.6 0 0 1 0-3.2Zm4.8 0a1.6 1.6 0 1 1 0 3.2 1.6 1.6 0 0 1 0-3.2Zm4.8 0a1.6 1.6 0 1 1 0 3.2 1.6 1.6 0 0 1 0-3.2Z"/></svg><span>More</span></button>
+</nav>
+<div id="modal-root"></div>
+<div id="cmd-root"></div>
+<div id="toast-root" role="status" aria-live="polite" aria-atomic="false"></div>
+<div id="print-root"></div>
+
+<script type="module">
+/*{{ app }}*/
+</script>
+</body>
+</html>

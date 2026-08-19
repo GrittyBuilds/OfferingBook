@@ -1,5 +1,19 @@
 {
+  "name": "muniment",
+  "version": "2.0.0",
+  "description": "Muniment — the system of record for private offerings. One HTML file, no installation.",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "build": "node tools/build.mjs",
+    "check": "node tools/build.mjs --check",
+    "test": "node tools/test.mjs",
+    "test:units": "node tools/units.mjs"
+  },
   "devDependencies": {
-    "playwright": "^1.62.1"
+    "playwright": "^1.56.0"
+  },
+  "engines": {
+    "node": ">=20"
   }
 }

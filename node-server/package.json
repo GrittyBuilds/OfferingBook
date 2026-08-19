@@ -1,16 +1,12 @@
 {
-  "name": "muniment",
-  "version": "1.0.0",
-  "description": "Muniment — the system of record for private offerings. Local single-user tracker for private placements (PPMs), investors, and escrow funds.",
+  "name": "muniment-server",
+  "version": "2.0.0",
+  "description": "Serves Muniment.html over http, for anyone who prefers a local server to opening the file. The application itself is the same single file.",
   "type": "module",
   "private": true,
   "scripts": {
     "start": "node src/server.js",
-    "dev": "node --watch src/server.js"
-  },
-  "dependencies": {
-    "better-sqlite3": "^11.8.1",
-    "express": "^4.21.2"
+    "export-sqlite": "node src/export-sqlite.js"
   },
   "engines": {
     "node": ">=20"
