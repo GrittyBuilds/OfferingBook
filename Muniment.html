@@ -685,6 +685,16 @@ textarea{min-height:70px;resize:vertical;line-height:1.55}
 .readiness-banner svg{width:17px;height:17px;flex-shrink:0;margin-top:1px}
 .readiness-banner.met{background:var(--green-bg);border-color:color-mix(in srgb,var(--green) 26%,transparent);color:var(--green)}
 .readiness-banner.short{background:var(--amber-bg);border-color:color-mix(in srgb,var(--amber) 30%,transparent);color:var(--amber)}
+/* The same idea, for a panel that needs to say something before its table:
+   a condition, and the one action that answers it. */
+.banner{
+  display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap;
+  padding:12px 15px;border-radius:var(--radius);margin:0 0 16px;
+  border:1px solid var(--border-strong);background:var(--surface-2);font-size:var(--t-sm);
+}
+.banner-warn{background:var(--amber-bg);border-color:color-mix(in srgb,var(--amber) 30%,transparent);color:var(--amber)}
+.banner-warn strong{color:inherit}
+.banner .btn{flex-shrink:0}
 .readiness-detail{color:var(--text-soft);font-size:var(--t-sm);margin-top:2px}
 .readiness-banner.met .readiness-detail,.readiness-banner.short .readiness-detail{color:inherit;opacity:.9}
 .ack-row{display:flex;align-items:center;gap:8px;margin-top:9px;font-size:var(--t-sm);color:var(--text)}
@@ -1165,6 +1175,20 @@ const ENTITY_TYPE_ORDER=['Individual','Joint','IRA / Retirement','Trust','Entity
 function isPersonType(t){return PERSON_TYPES.includes(t);}
 const ACCREDITED_STATUSES=['Unknown','Self-certified','Verified','Not accredited'];
 const ACCREDITED_KIND={Unknown:'muted','Self-certified':'info',Verified:'success','Not accredited':'danger'};
+// How accreditation was established. The status says whether; this says what
+// the file would show if anyone asked — which is the part that evidences the
+// exemption rather than merely asserting it.
+const ACCREDITATION_BASES=[
+  'Income — individual','Income — joint with spouse','Net worth','Professional certification or licence',
+  'Knowledgeable employee of the fund','Director, officer or general partner of the issuer',
+  'Entity — assets over the threshold','Entity — all equity owners accredited','Family office or client',
+  'Letter from counsel, an accountant or a broker-dealer','Third-party verification service','Other'];
+// A verification that is old enough that the next sale should not rest on it.
+// Not a rule anywhere in Reg D — a house standard, and stated as one.
+const ACCREDITATION_STALE_DAYS=90;
+const US_STATES=['AL','AK','AZ','AR','CA','CO','CT','DE','DC','FL','GA','HI','ID','IL','IN','IA','KS','KY','LA','ME','MD','MA','MI','MN','MS','MO','MT','NE','NV','NH','NJ','NM','NY','NC','ND','OH','OK','OR','PA','PR','RI','SC','SD','TN','TX','UT','VT','VA','WA','WV','WI','WY'];
+const STATE_NAMES={AL:'Alabama',AK:'Alaska',AZ:'Arizona',AR:'Arkansas',CA:'California',CO:'Colorado',CT:'Connecticut',DE:'Delaware',DC:'District of Columbia',FL:'Florida',GA:'Georgia',HI:'Hawaii',ID:'Idaho',IL:'Illinois',IN:'Indiana',IA:'Iowa',KS:'Kansas',KY:'Kentucky',LA:'Louisiana',ME:'Maine',MD:'Maryland',MA:'Massachusetts',MI:'Michigan',MN:'Minnesota',MS:'Mississippi',MO:'Missouri',MT:'Montana',NE:'Nebraska',NV:'Nevada',NH:'New Hampshire',NJ:'New Jersey',NM:'New Mexico',NY:'New York',NC:'North Carolina',ND:'North Dakota',OH:'Ohio',OK:'Oklahoma',OR:'Oregon',PA:'Pennsylvania',PR:'Puerto Rico',RI:'Rhode Island',SC:'South Carolina',SD:'South Dakota',TN:'Tennessee',TX:'Texas',UT:'Utah',VT:'Vermont',VA:'Virginia',WA:'Washington',WV:'West Virginia',WI:'Wisconsin',WY:'Wyoming'};
+function stateName(code){return STATE_NAMES[code]||code||'—';}
 const SUBSCRIPTION_STATUSES=['Prospect','Sub sent','Sub signed','Funded','Closed','Withdrawn'];
 const SUBSCRIPTION_KIND={Prospect:'muted','Sub sent':'info','Sub signed':'warn',Funded:'success',Closed:'success',Withdrawn:'danger'};
 const TXN_TYPES=[{value:'deposit',label:'Deposit — investor to escrow'},{value:'release',label:'Release — escrow to issuer'},{value:'refund',label:'Refund — escrow to investor'},{value:'fee',label:'Fee or expense — out of escrow'}];
@@ -2443,6 +2467,131 @@ const SETTINGS_DEFAULTS={
 };
 function settings(){return{...SETTINGS_DEFAULTS,...(db.settings||{})};}
 
+/* ============================================================================
+   THE EXEMPTION — what the record says about the ground the offering stands on.
+
+   Everything here reads facts the app already stored and works out where they
+   put the offering. None of it files anything, and none of it is advice; it
+   answers questions the file can answer and says which fact each answer came
+   from, so the suggestion strip can put them where they will be seen rather
+   than leaving them to be remembered.
+   ========================================================================== */
+
+// The date of first sale, and which fact fixed it. Rule 503 runs the Form D
+// deadline from here, and the app has known it all along: the earliest signed
+// subscription, or the earliest deposit that actually cleared.
+function firstSale(offeringId){
+  offeringId=Number(offeringId);
+  const subs=db.subscriptions.filter(s=>s.offering_id===offeringId&&s.status!=='Withdrawn');
+  const signed=subs.map(s=>s.sub_signed_date).filter(Boolean).sort()[0]||null;
+  const cleared=db.escrow.filter(e=>e.offering_id===offeringId&&e.txn_type==='deposit'&&e.cleared)
+    .map(e=>e.txn_date).filter(Boolean).sort()[0]||null;
+  if(!signed&&!cleared)return{date:null,from:null};
+  if(signed&&(!cleared||signed<=cleared))return{date:signed,from:'the earliest signed subscription'};
+  return{date:cleared,from:'the earliest cleared deposit'};
+}
+// Fifteen calendar days after the first sale, which is what Rule 503 gives.
+const FORM_D_DAYS=15;
+function addDays(dateStr,n){
+  const d=dayOf(dateStr);if(!d)return null;
+  const out=new Date(d.getFullYear(),d.getMonth(),d.getDate()+n);
+  return `${out.getFullYear()}-${String(out.getMonth()+1).padStart(2,'0')}-${String(out.getDate()).padStart(2,'0')}`;
+}
+function addYears(dateStr,n){
+  const d=dayOf(dateStr);if(!d)return null;
+  const out=new Date(d.getFullYear()+n,d.getMonth(),d.getDate());
+  return `${out.getFullYear()}-${String(out.getMonth()+1).padStart(2,'0')}-${String(out.getDate()).padStart(2,'0')}`;
+}
+// Where the offering stands on its Form D. Returns null where the exemption
+// does not call for one.
+function formDPosition(o){
+  if(!o||!/^Reg D/.test(String(o.exemption||'')))return null;
+  const sale=firstSale(o.id);
+  const due=sale.date?addDays(sale.date,FORM_D_DAYS):null;
+  const filed=o.form_d_filed_date||null;
+  const live=!['Closed','Terminated'].includes(o.status);
+  // The annual amendment falls on or before the anniversary of the last
+  // filing, for as long as the offering continues.
+  const amendmentDue=filed&&live?addYears(filed,1):null;
+  return{
+    firstSale:sale.date,from:sale.from,due,filed,
+    daysLeft:due?daysUntil(due):null,
+    // Filed late is a fact about the file, not a thing to fix now; it is
+    // reported once and never nagged about.
+    filedLate:!!(filed&&due&&filed>due),
+    overdue:!!(due&&!filed&&daysUntil(due)<0),
+    amendmentDue,
+    amendmentDaysLeft:amendmentDue?daysUntil(amendmentDue):null};
+}
+
+// Purchasers on an offering, and what the record establishes about them.
+function purchaserStanding(offeringId){
+  offeringId=Number(offeringId);
+  const subs=db.subscriptions.filter(s=>s.offering_id===offeringId&&s.status!=='Withdrawn');
+  const rows=subs.map(s=>({sub:s,investor:db.investors.find(i=>i.id===s.investor_id)||null}));
+  const statusOf=r=>(r.investor&&r.investor.accredited_status)||'Unknown';
+  return{
+    total:rows.length,
+    rows,
+    verified:rows.filter(r=>statusOf(r)==='Verified'),
+    selfCertified:rows.filter(r=>statusOf(r)==='Self-certified'),
+    // Established as not accredited. These are the ones the 506(b) ceiling counts.
+    nonAccredited:rows.filter(r=>statusOf(r)==='Not accredited'),
+    // Neither established nor denied. Not evidence of anything, which is the
+    // problem with leaving them there.
+    unestablished:rows.filter(r=>statusOf(r)==='Unknown')};
+}
+// Rule 506(b): no more than thirty-five non-accredited purchasers, and any at
+// all bring the Rule 502(b) information-delivery obligation with them.
+const RULE_506B_LIMIT=35;
+
+// A verification whose evidence is old enough that a sale today should not
+// rest on it. Returns days stale, or null where it does not arise.
+function accreditationStaleness(investor,asOf){
+  if(!investor||investor.accredited_status!=='Verified')return null;
+  const at=investor.accredited_evidence_date||investor.accredited_verified_date;
+  if(!at)return null;
+  const days=daysBetween(at,asOf||todayISO());
+  return days!=null&&days>ACCREDITATION_STALE_DAYS?days:null;
+}
+
+/* ---- Blue sky ------------------------------------------------------------
+   The checklist compressed the whole of state practice into one line. It is
+   one notice filing per state of residence, each with its own fee and its own
+   clock — and the record already knows which states are in play, because it
+   knows where the subscribers are. */
+function stateFilings(offeringId){
+  offeringId=Number(offeringId);
+  return db.state_filings.filter(f=>f.offering_id===offeringId)
+    .sort((a,b)=>String(a.state||'').localeCompare(String(b.state||'')));
+}
+// A two-letter state from the investor's own field, or read off the tail of
+// the address when that is all there is — "…Ann Arbor, MI 48104". A guess is
+// only ever offered as a suggestion; nothing is written from one.
+function investorState(i){
+  if(!i)return null;
+  const own=str(i.state);
+  if(own&&US_STATES.includes(own.toUpperCase()))return own.toUpperCase();
+  const words=String(i.address||'').trim().toUpperCase()
+    .replace(/\s+\d{5}(-\d{4})?$/,'')          // a trailing ZIP is not the state
+    .split(/[,\s]+/).filter(Boolean);
+  const last=words[words.length-1];
+  return last&&US_STATES.includes(last)?last:null;
+}
+// Which states this offering has sold into, with who put each one in play.
+function statesInPlay(offeringId){
+  offeringId=Number(offeringId);
+  const out=new Map();
+  for(const s of db.subscriptions.filter(x=>x.offering_id===offeringId&&x.status!=='Withdrawn')){
+    const inv=db.investors.find(i=>i.id===s.investor_id);
+    const code=investorState(inv);
+    if(!code)continue;
+    if(!out.has(code))out.set(code,[]);
+    out.get(code).push({investor:inv,sub:s});
+  }
+  return out;
+}
+
 /* ---- Party directory ----------------------------------------------------- */
 // Issuers, escrow agents, banks and counsel are typed once and picked thereafter.
 const PARTY_ROLES=['Issuer','Escrow agent','Counsel','Placement agent','Fund administrator','Other'];
@@ -2715,7 +2864,16 @@ function investorFromBody(b){
     tax_id:str(b.tax_id),
     contact_name:str(b.contact_name),email:str(b.email),
     phone:str(b.phone),address:str(b.address),accredited_status:str(b.accredited_status)||'Unknown',
-    accredited_verified_date:str(b.accredited_verified_date),notes:str(b.notes)};}
+    accredited_verified_date:str(b.accredited_verified_date),
+    // How accreditation was established, and the date of the evidence that
+    // established it — the part that evidences the exemption rather than
+    // merely asserting it.
+    accreditation_basis:str(b.accreditation_basis),
+    accredited_evidence_date:str(b.accredited_evidence_date),
+    // Kept as its own field rather than dug out of the address every time:
+    // this decides which state notice filings the offering needs.
+    state:(str(b.state)||'').toUpperCase()||null,
+    notes:str(b.notes)};}
 function subFromBody(b){return{
   investor_id:numOr(b.investor_id),amount_committed_cents:dollarsToCents(b.amount_committed),units:numOr(b.units),
   costs_cents:dollarsToCents(b.costs),tranche_id:numOr(b.tranche_id),funded_date:str(b.funded_date),
@@ -2993,6 +3151,46 @@ const api={
       checklist_template:Array.isArray(b.checklist_template)?b.checklist_template:cur.checklist_template};
     db.settings={...db.settings,...row};await persist();return settings();},
 
+  /* ---- Filings ------------------------------------------------------------
+     Form D's position is computed rather than stored; the state notices are
+     rows, because each one has its own date, fee and confirmation number. */
+  async listFilings(offeringId){offeringId=Number(offeringId);
+    const o=db.offerings.find(x=>x.id===offeringId);
+    if(!o)throw new Error('Offering not found');
+    const play=statesInPlay(offeringId);
+    const rows=stateFilings(offeringId).map(f=>({...f,
+      holders:(play.get(f.state)||[]).map(x=>x.investor?investorDisplayName(x.investor):'—'),
+      // A row for a state nobody is in any more is not wrong, but it is worth
+      // saying so rather than leaving it looking outstanding.
+      inPlay:play.has(f.state)}));
+    const known=new Set(rows.map(r=>r.state));
+    return{formD:formDPosition(o),
+      states:rows,
+      // States the roster puts in play that have no row at all.
+      missing:[...play.keys()].filter(c=>!known.has(c)).sort()
+        .map(c=>({state:c,holders:(play.get(c)||[]).map(x=>x.investor?investorDisplayName(x.investor):'—')})),
+      // Subscribers with no state recorded, who could be hiding a filing.
+      unplaced:db.subscriptions.filter(s=>s.offering_id===offeringId&&s.status!=='Withdrawn')
+        .map(s=>db.investors.find(i=>i.id===s.investor_id)).filter(i=>i&&!investorState(i))
+        .map(i=>investorDisplayName(i))};},
+  async saveStateFiling(offeringId,b,id){offeringId=Number(offeringId);
+    const state=(str(b.state)||'').toUpperCase();
+    if(!US_STATES.includes(state))throw new Error('Pick a state.');
+    const row={state,filed_date:str(b.filed_date),fee_cents:dollarsToCents(b.fee),
+      confirmation:str(b.confirmation),notes:str(b.notes)};
+    if(id){const f=db.state_filings.find(x=>x.id===Number(id));
+      if(!f)throw new Error('Filing not found');
+      // One row per state per offering, or the outstanding list double-counts.
+      if(db.state_filings.some(x=>x.offering_id===offeringId&&x.state===state&&x.id!==Number(id)))
+        throw new Error(`${stateName(state)} already has a row on this offering.`);
+      Object.assign(f,row);await persist();return f;}
+    if(db.state_filings.some(x=>x.offering_id===offeringId&&x.state===state))
+      throw new Error(`${stateName(state)} already has a row on this offering.`);
+    const f={id:nextId('state_filings'),offering_id:offeringId,...row,created_at:nowISO()};
+    db.state_filings.push(f);await persist();return f;},
+  async deleteStateFiling(id){id=Number(id);
+    db.state_filings=db.state_filings.filter(f=>f.id!==id);await persist();return{ok:true};},
+
   /* ---- Party directory -------------------------------------------------- */
   // Issuers, escrow agents, counsel. Entered once; picked everywhere after.
   async listParties(role){return role?partiesByRole(role):db.parties.slice().sort((a,b)=>
@@ -3127,6 +3325,10 @@ const AUDIT={
   deleteCertificate:id=>{const c=db.certificates.find(x=>x.id===Number(id));
     return[`Deleted certificate ${c?c.cert_number:''}`,c?c.offering_id:null];},
   renumberCertificates:offId=>[`Renumbered the certificates on “${oNameOf(offId)}”`,Number(offId)],
+
+  saveStateFiling:(offId,b,id)=>[`${id?'Edited':'Recorded'} the ${stateName((str(b.state)||'').toUpperCase())} notice filing`,Number(offId)],
+  deleteStateFiling:id=>{const f=db.state_filings.find(x=>x.id===Number(id));
+    return[`Deleted the ${f?stateName(f.state):''} notice filing`,f?f.offering_id:null];},
 
   saveSettings:()=>[`Changed the firm settings`,null],
   saveParty:(b,id)=>[`${id?'Edited':'Added'} ${str(b.name)||'a counterparty'} in the directory`,null],
@@ -3309,6 +3511,115 @@ function computeSuggestions(offeringId){
     const subs=db.subscriptions.filter(s=>s.offering_id===o.id);
     const tasks=db.tasks.filter(t=>t.offering_id===o.id);
     const es=escrowSummary(o.id);
+
+    /* ── The exemption ─────────────────────────────────────────────────────
+       These read facts already in the file and say where they put the
+       offering. Nothing here files anything or gives advice; each one names
+       the fact it came from, and the ones with no `apply` are saying
+       something that needs a decision rather than a keystroke. */
+
+    // Form D. The app has always known the date of first sale and never once
+    // mentioned that a filing falls due fifteen days after it.
+    const fd=formDPosition(o);
+    if(fd&&fd.firstSale&&!fd.filed){
+      const late=fd.daysLeft<0;
+      out.push(sugg(`formd-due:${o.id}:${fd.due}`,o.id,
+        late?`Form D on ${o.name} was due ${fmtDate(fd.due)}`
+            :`Form D on ${o.name} is due ${fmtDate(fd.due)}`,
+        `First sale is ${fmtDate(fd.firstSale)}, taken from ${fd.from}. Rule 503 gives fifteen days from there, which ${late?'ran out':'runs out'} on ${fmtDate(fd.due)}. Record the filing date on the offering once it is filed.`,
+        relDays(fd.daysLeft),null,late?'warn':'info'));
+    }
+    // The annual amendment, while the offering continues.
+    if(fd&&fd.amendmentDue&&fd.amendmentDaysLeft!==null&&fd.amendmentDaysLeft<=30){
+      out.push(sugg(`formd-amend:${o.id}:${fd.amendmentDue}`,o.id,
+        `The Form D amendment on ${o.name} falls due ${fmtDate(fd.amendmentDue)}`,
+        `The last filing recorded is ${fmtDate(fd.filed)} and the offering is still ${o.status}. An amendment falls due on or before the anniversary while it continues. Recording the new filing date here resets the year.`,
+        relDays(fd.amendmentDaysLeft),null,fd.amendmentDaysLeft<0?'warn':'info'));
+    }
+
+    const standing=purchaserStanding(o.id);
+    const is506b=o.exemption==='Reg D 506(b)';
+    const is506c=o.exemption==='Reg D 506(c)';
+
+    // 506(b): the thirty-five ceiling, and what the first non-accredited
+    // purchaser brings with them.
+    if(is506b&&standing.nonAccredited.length){
+      const n=standing.nonAccredited.length;
+      if(n>RULE_506B_LIMIT){
+        out.push(sugg(`506b-over:${o.id}:${n}`,o.id,
+          `${o.name} has ${n} non-accredited purchasers`,
+          `Rule 506(b) allows no more than ${RULE_506B_LIMIT}. The exemption does not hold at ${n}, and the roster is the record of it.`,
+          `${n} of ${RULE_506B_LIMIT}`,null,'warn'));
+      }else if(n>=RULE_506B_LIMIT-5){
+        out.push(sugg(`506b-near:${o.id}:${n}`,o.id,
+          `${o.name} is ${RULE_506B_LIMIT-n} purchaser${RULE_506B_LIMIT-n===1?'':'s'} from the 506(b) ceiling`,
+          `${n} of the ${RULE_506B_LIMIT} non-accredited purchasers Rule 506(b) allows are on the roster.`,
+          `${n} of ${RULE_506B_LIMIT}`,null,'warn'));
+      }
+      out.push(sugg(`506b-info:${o.id}:${n}`,o.id,
+        `${o.name} owes Rule 502(b) information to ${n} purchaser${n===1?'':'s'}`,
+        `Admitting even one non-accredited purchaser under 506(b) brings the information-delivery requirement with it — the financial and non-financial disclosure the rule specifies, delivered a reasonable time before sale. The checklist has no step for it.`,
+        standing.nonAccredited.map(r=>r.investor?investorDisplayName(r.investor):'—').slice(0,3).join(', ')
+          +(n>3?` and ${n-3} more`:''),
+        // The one thing the app can actually do about it: put the step on
+        // this offering's checklist, where it will be seen again.
+        async()=>{const label='Deliver Rule 502(b) information to non-accredited purchasers';
+          if(db.tasks.some(t=>t.offering_id===o.id&&t.label===label))return;
+          const max=db.tasks.filter(t=>t.offering_id===o.id).reduce((m,t)=>Math.max(m,t.sort_order||0),0);
+          db.tasks.push({id:nextId('tasks'),offering_id:o.id,label,done:0,done_date:null,
+            due_date:null,sort_order:max+1,created_at:nowISO()});
+          await persist();},'warn'));
+    }
+    // 506(b) forbids general solicitation outright.
+    if(is506b&&o.general_solicitation){
+      out.push(sugg(`506b-solicit:${o.id}`,o.id,
+        `${o.name} is marked as generally solicited under 506(b)`,
+        'Rule 506(b) is unavailable where the offering is generally solicited or advertised. Either the flag is wrong, or the exemption is 506(c) — under which every purchaser must be verified.',
+        o.exemption,null,'warn'));
+    }
+    // 506(c): self-certification is not enough, and that is the whole bargain.
+    if(is506c){
+      const short=[...standing.selfCertified,...standing.unestablished];
+      if(short.length){
+        out.push(sugg(`506c-verify:${o.id}:${short.length}`,o.id,
+          `${short.length} purchaser${short.length===1?' on':'s on'} ${o.name} ${short.length===1?'is':'are'} not verified`,
+          'Under 506(c) general solicitation is permitted because every purchaser is verified. Self-certification does not satisfy it, and neither does an unrecorded status. Record the verification, its basis and its date on each contact.',
+          short.map(r=>r.investor?investorDisplayName(r.investor):'—').slice(0,3).join(', ')
+            +(short.length>3?` and ${short.length-3} more`:''),
+          null,'warn'));
+      }
+    }
+    // Rule 506(d). Its absence from the file is the awkward part.
+    if(/^Reg D 506/.test(String(o.exemption||''))&&!o.bad_actor_checked_date&&
+       (subs.length||o.status!=='Drafting')){
+      out.push(sugg(`bad-actor:${o.id}`,o.id,
+        `No bad-actor inquiry is recorded for ${o.name}`,
+        'Rule 506(d) disqualifies an offering where a covered person has a relevant order or conviction. The inquiry is routine; what is not routine is having no record that it was made. Edit the offering to record the date.',
+        o.exemption,null,'warn'));
+    }
+
+    // Blue sky: which states the roster has put in play, and which of them
+    // have no filing recorded.
+    {
+      const play=statesInPlay(o.id);
+      const filed=new Set(stateFilings(o.id).filter(f=>f.filed_date).map(f=>f.state));
+      const missing=[...play.keys()].filter(c=>!filed.has(c)).sort();
+      if(missing.length){
+        out.push(sugg(`blue-sky:${o.id}:${missing.join(',')}`,o.id,
+          `${missing.length} state${missing.length===1?'' :'s'} on ${o.name} ${missing.length===1?'has':'have'} no notice filing recorded`,
+          `Subscribers are resident in ${missing.map(stateName).join(', ')} and no filing is on record for ${missing.length===1?'it':'them'}. Most states want a notice within fifteen days of the first sale in the state, with a fee.`,
+          missing.join(' · '),
+          // Open a row per state, ready to be dated. Nothing is claimed as
+          // filed — the rows are there to be filled in.
+          async()=>{
+            for(const code of missing){
+              if(db.state_filings.some(f=>f.offering_id===o.id&&f.state===code))continue;
+              db.state_filings.push({id:nextId('state_filings'),offering_id:o.id,state:code,
+                filed_date:null,fee_cents:null,confirmation:null,notes:null,created_at:nowISO()});
+            }
+            await persist();},'warn'));
+      }
+    }
 
     /* -- Money that arrived, against the subscription it answers ----------- */
     for(const s of subs){
@@ -3520,6 +3831,34 @@ function computeSuggestions(offeringId){
           'The investor is marked Verified with no verification date. The date is the part that evidences the exemption.',
           'Verified, undated',null));
       }
+      // The status says whether; nothing said how, which is the half a file
+      // is actually read for.
+      if(i.accredited_status==='Verified'&&i.accredited_verified_date&&!i.accreditation_basis){
+        out.push(sugg(`acc-basis:${i.id}`,null,`Record how ${investorDisplayName(i)}'s accreditation was established`,
+          'Verified on a date, but the file does not say on what — income, net worth, a professional licence, a letter from counsel. The basis is what the evidence consists of.',
+          `Verified ${fmtDate(i.accredited_verified_date)}`,null));
+      }
+      // Evidence goes stale. Not a rule in Reg D — a house standard, and said
+      // as one rather than dressed up as the regulation.
+      const stale=accreditationStaleness(i);
+      if(stale){
+        const live=db.subscriptions.some(s=>s.investor_id===i.id&&s.status!=='Withdrawn'&&!s.closing_id);
+        if(live)out.push(sugg(`acc-stale:${i.id}:${i.accredited_evidence_date||i.accredited_verified_date}`,null,
+          `${investorDisplayName(i)}'s accreditation evidence is ${stale} days old`,
+          `The evidence relied on is dated ${fmtDate(i.accredited_evidence_date||i.accredited_verified_date)} and there is an open subscription. A firm taking ${ACCREDITATION_STALE_DAYS} days as its limit would re-verify before the next sale.`,
+          `${stale} days`,null,'warn'));
+      }
+      // A holder with no state is a state notice filing nobody can see is due.
+      if(!str(i.state)){
+        const guess=investorState(i);
+        const onDeals=db.subscriptions.some(s=>s.investor_id===i.id&&s.status!=='Withdrawn');
+        if(guess&&onDeals)out.push(sugg(`inv-state:${i.id}:${guess}`,null,
+          `Record ${investorDisplayName(i)} as resident in ${stateName(guess)}`,
+          'The address ends in this state and the contact has no state recorded. State notice filings are worked out from this field, so a blank one hides a filing that may be due.',
+          guess,
+          async()=>{const inv=db.investors.find(x=>x.id===i.id);
+            if(inv&&!str(inv.state)){inv.state=guess;inv.updated_at=nowISO();await persist();}}));
+      }
     }
     // Two records for one person is the most expensive duplicate of all.
     const seen=new Map();
@@ -3669,8 +4008,19 @@ function openInvestorForm(existing,onDone){
       {name:'email',label:'Email',type:'email',half:true},
       {name:'phone',label:'Phone',type:'tel',half:true},
       {name:'accredited_status',label:'Accredited status',type:'select',options:ACCREDITED_STATUSES,half:true},
-      {name:'accredited_verified_date',label:'Verified on',type:'date',half:true},
+      {name:'accredited_verified_date',label:'Verified on',type:'date',half:true,
+        showIf:v=>v.accredited_status==='Verified'||v.accredited_status==='Self-certified'},
+      {name:'accreditation_basis',label:'Established by',type:'select',half:true,
+        options:['',...ACCREDITATION_BASES],
+        showIf:v=>v.accredited_status==='Verified'||v.accredited_status==='Self-certified',
+        help:'The status says whether. This says what the file would show if anyone asked.'},
+      {name:'accredited_evidence_date',label:'Evidence dated',type:'date',half:true,
+        showIf:v=>v.accredited_status==='Verified'||v.accredited_status==='Self-certified',
+        help:`The date on the letter or statement relied on. Flagged once it is more than ${ACCREDITATION_STALE_DAYS} days old.`},
       {name:'address',label:'Address',type:'textarea',rows:2},
+      {name:'state',label:'State',type:'select',half:true,
+        options:[{value:'',label:'— Not recorded —'},...US_STATES.map(c=>({value:c,label:`${c} — ${stateName(c)}`}))],
+        help:'Decides which state notice filings an offering this holder subscribes to will need.'},
       {name:'notes',label:'Notes',type:'textarea'}],
     onSubmit:async v=>{const saved=isEdit?await api.updateInvestor(existing.id,v):await api.createInvestor(v);
       toast(isEdit?'Investor updated.':'Investor added.','success');onDone?.(saved);}});
@@ -3852,7 +4202,7 @@ function offeringCard(o){
       days!==null&&!['Closed','Terminated'].includes(o.status)?el('span',{class:days<=14&&days>=0?'urgent-text':''},`Close ${relDays(days)}`):el('span',{},o.no_deadline?'Open-ended':fmtDate(o.final_close_date))));
 }
 
-const TABS=['Overview','Tranches','Investors','Escrow','Closings','Certificates','Checklist','Reconciliation'];
+const TABS=['Overview','Tranches','Investors','Escrow','Closings','Certificates','Filings','Checklist','Reconciliation'];
 async function renderOffering(id){
   const[offering,investors]=await Promise.all([api.getOffering(id),api.listInvestors()]);
   const state={offering,investors,tab:currentTab()};
@@ -3875,7 +4225,9 @@ async function renderOffering(id){
     const render={Overview:()=>overviewTab(state),Tranches:()=>tranchesTab(state,drawTab,reloadOffering),
       Investors:()=>investorsTab(state,drawTab,reloadOffering),
       Escrow:()=>escrowTab(state,drawTab,reloadOffering),Closings:()=>closingsTab(state,drawTab,reloadOffering),
-      Certificates:()=>certificatesTab(state),Checklist:()=>checklistTab(state),Reconciliation:()=>reconciliationTab(state)}[state.tab];
+      Certificates:()=>certificatesTab(state),
+      Filings:()=>filingsTab(state,drawTab,reloadOffering),
+      Checklist:()=>checklistTab(state),Reconciliation:()=>reconciliationTab(state)}[state.tab];
     const node=await render();clear(tabContent);tabContent.appendChild(node);}
   // A tab that carries its own state — the as-of date on the certificate
   // roster, say — needs a way to draw itself again without losing it.
@@ -3910,7 +4262,14 @@ function overviewTab(state){
         ['Minimum investment',minInvestDisplay(o)],
         ['Minimum raise',o.target_min_cents!=null?money(o.target_min_cents):null],
         ['Maximum raise',maxRaiseDisplay(o)],
-        ['Launch date',fmtDate(o.launch_date)],['Form D filed',fmtDate(o.form_d_filed_date)],
+        ['Launch date',fmtDate(o.launch_date)],
+        ['Form D',(()=>{const f=formDPosition(o);
+          if(!f)return o.form_d_filed_date?fmtDate(o.form_d_filed_date):null;
+          if(f.filed)return el('span',{},fmtDate(f.filed),f.filedLate?el('span',{class:'warn-text'},' — after the deadline'):null);
+          if(!f.firstSale)return el('span',{class:'muted-text'},'Due fifteen days after the first sale');
+          return el('span',{class:f.overdue?'warn-text':''},`Due ${fmtDate(f.due)} — ${relDays(f.daysLeft)}`);})()],
+        ['Bad-actor inquiry',/^Reg D 506/.test(String(o.exemption||''))
+          ?(o.bad_actor_checked_date?fmtDate(o.bad_actor_checked_date):el('span',{class:'warn-text'},'Not recorded')):null],
         ['First / interim close',fmtDate(o.first_close_date)],['Final close deadline',closeDeadlineDisplay(o)]]),
       o.notes?el('div',{class:'notes-block'},el('h3',{},'Notes'),el('p',{},o.notes)):null),
     el('div',{},
@@ -4090,6 +4449,120 @@ async function checklistTab(state){
   return el('section',{class:'panel'},el('div',{class:'section-head'},el('h2',{},'Process checklist'),countLabel),list,
     el('div',{class:'add-task-row'},newInput,dueInput,el('button',{class:'btn btn-primary btn-sm',onclick:addTask},'Add step')));
 }
+/* ---- Filings -------------------------------------------------------------
+   What has to be filed, when it was due, and what has actually gone in. The
+   checklist used to carry one line for the whole of state practice. */
+async function filingsTab(state,drawTab,reloadOffering){
+  const o=state.offering;
+  const{formD,states,missing,unplaced}=await api.listFilings(o.id);
+  const standing=purchaserStanding(o.id);
+
+  const formDPanel=(()=>{
+    if(!formD)return el('section',{class:'panel'},
+      el('h2',{class:'panel-title'},'Form D'),
+      el('p',{class:'muted-text'},o.exemption
+        ?`This offering is recorded under ${o.exemption}, which does not call for a Form D.`
+        :'Set an exemption on this offering and its filing position appears here.'));
+    const rows=[
+      ['Exemption',o.exemption],
+      ['First sale',formD.firstSale?`${fmtDate(formD.firstSale)} — from ${formD.from}`:'Nothing sold yet'],
+      ['Due',formD.due?fmtDate(formD.due):'Fifteen days after the first sale'],
+      ['Filed',formD.filed?fmtDate(formD.filed):null],
+      formD.amendmentDue?['Next amendment',fmtDate(formD.amendmentDue)]:null];
+    const verdict=
+      !formD.firstSale?pill('Nothing sold yet — no clock running','muted')
+      :formD.filed&&formD.filedLate?pill(`Filed ${fmtDate(formD.filed)}, after the ${fmtDate(formD.due)} deadline`,'warn')
+      :formD.filed?pill(`Filed ${fmtDate(formD.filed)}`,'success')
+      :formD.overdue?pill(`Overdue — due ${fmtDate(formD.due)}, ${relDays(formD.daysLeft)}`,'danger')
+      :pill(`Due ${fmtDate(formD.due)} — ${relDays(formD.daysLeft)}`,formD.daysLeft<=5?'warn':'info');
+    return el('section',{class:'panel'},
+      el('div',{class:'section-head',style:'margin-top:0'},el('h2',{},'Form D'),
+        el('button',{class:'btn btn-ghost btn-sm',onclick:()=>openOfferingForm(o,()=>{reloadOffering().then(drawTab);})},
+          formD.filed?'Edit the filing date':'Record the filing')),
+      el('div',{style:'margin:0 0 12px'},verdict),
+      detailGrid(rows.filter(Boolean)),
+      el('p',{class:'field-help',style:'margin:12px 0 0'},
+        'Rule 503 gives fifteen calendar days from the date of first sale. Muniment works that date out from the earliest signed subscription or the earliest cleared deposit, whichever came first, and does not file anything for you.'));
+  })();
+
+  const diligencePanel=el('section',{class:'panel'},
+    el('div',{class:'section-head',style:'margin-top:0'},el('h2',{},'Exemption diligence'),
+      el('button',{class:'btn btn-ghost btn-sm',onclick:()=>openOfferingForm(o,()=>{reloadOffering().then(drawTab);})},'Edit')),
+    detailGrid([
+      ['Bad-actor inquiry (Rule 506(d))',o.bad_actor_checked_date
+        ?el('span',{},pill('Recorded','success'),' ',fmtDate(o.bad_actor_checked_date))
+        :pill('Not recorded','warn')],
+      ['General solicitation',o.general_solicitation?'Yes — permitted under 506(c) only':'No'],
+      ['Purchasers',`${standing.total} on the roster`],
+      ['Verified',String(standing.verified.length)],
+      standing.selfCertified.length?['Self-certified',String(standing.selfCertified.length)]:null,
+      standing.nonAccredited.length?['Not accredited',`${standing.nonAccredited.length}`+(o.exemption==='Reg D 506(b)'?` of ${RULE_506B_LIMIT} allowed`:'')]:null,
+      standing.unestablished.length?['Status not established',String(standing.unestablished.length)]:null
+    ].filter(Boolean)),
+    o.bad_actor_notes?el('div',{class:'notes-block'},el('h3',{},'Inquiry notes'),el('p',{},o.bad_actor_notes)):null);
+
+  const addBtn=el('button',{class:'btn btn-primary',onclick:()=>openStateFilingForm(o,null,null,async()=>{await reloadOffering();drawTab();})},'@icon:plus','Add a state');
+  const openRows=states.filter(f=>!f.filed_date).length;
+  const totalFees=states.reduce((a,f)=>a+(f.fee_cents||0),0);
+
+  const bluePanel=el('section',{class:'panel'},
+    el('div',{class:'section-head',style:'margin-top:0'},
+      el('div',{},el('h2',{},'State notice filings'),
+        el('div',{class:'section-figures'},
+          el('span',{},el('strong',{},String(states.length)),' state',states.length===1?'':'s'),
+          openRows?el('span',{},el('strong',{},String(openRows)),' not yet filed'):null,
+          totalFees?el('span',{},el('strong',{},money(totalFees)),' in fees'):null)),
+      addBtn),
+    el('p',{class:'field-help',style:'margin:-4px 0 14px'},
+      'One filing per state a subscriber is resident in. Most states want a notice within fifteen days of the first sale in the state, with a fee. Muniment works out which states are in play from the roster; the dates and confirmations are yours to enter.'),
+    missing.length?el('div',{class:'banner banner-warn'},
+      el('div',{},el('strong',{},`${missing.length} state${missing.length===1?'':'s'} on the roster with no row here: `),
+        missing.map(m=>stateName(m.state)).join(', ')),
+      el('button',{class:'btn btn-sm',onclick:async()=>{
+        for(const m of missing)await api.saveStateFiling(o.id,{state:m.state});
+        toast(`Added ${missing.length} state${missing.length===1?'':'s'}.`,'success');
+        await reloadOffering();drawTab();}},'Add them')):null,
+    !states.length?emptyState('No state filings recorded yet.'):
+    dataTable([
+      {label:'State',primary:true,render:f=>[el('span',{},stateName(f.state)),
+        el('div',{class:'cell-sub'},f.holders.length?f.holders.slice(0,2).join(', ')+(f.holders.length>2?` and ${f.holders.length-2} more`:''):'No current subscriber resident here')]},
+      {label:'Code',hide:true,cls:'mono',render:f=>f.state},
+      {label:'Filed',render:f=>f.filed_date?el('span',{},pill(fmtDate(f.filed_date),'success')):pill('Not filed','warn')},
+      {label:'Fee',num:true,render:f=>f.fee_cents!=null?money(f.fee_cents):'—'},
+      {label:'Confirmation',hide:true,cls:'mono',render:f=>f.confirmation||'—'},
+      {label:'',cls:'row-actions',render:f=>rowActions(
+        iconButton('edit',`Edit the ${stateName(f.state)} filing`,()=>openStateFilingForm(o,f,null,async()=>{await reloadOffering();drawTab();})),
+        iconButton('trash',`Delete the ${stateName(f.state)} filing`,async()=>{
+          const ok=await confirmDialog(`Delete the ${stateName(f.state)} filing row?`,{danger:true,confirmLabel:'Delete'});
+          if(!ok)return;await api.deleteStateFiling(f.id);toast('Deleted.','success');
+          await reloadOffering();drawTab();},{danger:true}))}
+    ],states,{caption:'State notice filings',
+      foot:totalFees?el('tr',{},el('td',{class:'rec-primary',dataset:{label:''}},'Total fees'),
+        el('td',{class:'rec-hide'},''),el('td',{class:'rec-hide'},''),
+        el('td',{class:'num',dataset:{label:'Fee'}},money(totalFees)),
+        el('td',{class:'rec-hide'},''),el('td',{class:'rec-hide'},'')):null}),
+    unplaced.length?el('p',{class:'field-help',style:'margin:12px 0 0'},
+      `${unplaced.length} subscriber${unplaced.length===1?' has':'s have'} no state recorded (${unplaced.slice(0,3).join(', ')}${unplaced.length>3?` and ${unplaced.length-3} more`:''}), so any filing they call for is not shown here.`):null);
+
+  return el('div',{},el('div',{class:'grid-2'},formDPanel,diligencePanel),bluePanel);
+}
+function openStateFilingForm(offering,existing,presetState,onDone){
+  formModal({title:existing?`Edit the ${stateName(existing.state)} filing`:'State notice filing',wide:true,
+    submitLabel:existing?'Save changes':'Add',
+    values:existing?{state:existing.state,filed_date:existing.filed_date,fee:centsToInput(existing.fee_cents),
+      confirmation:existing.confirmation,notes:existing.notes}
+      :{state:presetState||'',filed_date:''},
+    fields:[
+      {name:'state',label:'State',type:'select',required:true,half:true,
+        options:[{value:'',label:'— Pick a state —'},...US_STATES.map(c=>({value:c,label:`${c} — ${stateName(c)}`}))]},
+      {name:'filed_date',label:'Filed on',type:'date',half:true,help:'Leave blank until it has gone in.'},
+      {name:'fee',label:'Filing fee',type:'money',half:true},
+      {name:'confirmation',label:'Confirmation / file number',half:true,mono:true},
+      {name:'notes',label:'Notes',type:'textarea',rows:2}],
+    onSubmit:async v=>{await api.saveStateFiling(offering.id,v,existing?existing.id:null);
+      toast(existing?'Filing saved.':'State added.','success');onDone?.();}});
+}
+
 async function reconciliationTab(state){
   const{reconciliations,summary}=await api.listReconciliations(state.offering.id);
   const dateInput=el('input',{type:'date',class:'inline-input date'});
@@ -4513,7 +4986,15 @@ async function renderInvestor(id){
       el('section',{class:'panel'},el('h2',{class:'panel-title'},'Contact & accreditation'),
         detailGrid([['Type',inv.entity_type],['SSN / EIN',fmtTaxId(inv.tax_id)],
           ['Email',inv.email?el('a',{class:'link',href:`mailto:${inv.email}`},inv.email):'—'],['Phone',inv.phone],['Address',inv.address],
-          ['Accredited status',pill(inv.accredited_status,ACCREDITED_KIND[inv.accredited_status]||'muted')],['Verified on',fmtDate(inv.accredited_verified_date)]]),
+          ['State',investorState(inv)?stateName(investorState(inv))+(str(inv.state)?'':' (read from the address)'):null],
+          ['Accredited status',pill(inv.accredited_status,ACCREDITED_KIND[inv.accredited_status]||'muted')],
+          ['Verified on',fmtDate(inv.accredited_verified_date)],
+          ['Established by',inv.accreditation_basis],
+          ['Evidence dated',inv.accredited_evidence_date
+            ?(()=>{const stale=accreditationStaleness(inv);
+              return stale?el('span',{},fmtDate(inv.accredited_evidence_date),' ',pill(`${stale} days old`,'warn'))
+                :fmtDate(inv.accredited_evidence_date);})()
+            :null]]),
         inv.notes?el('div',{class:'notes-block'},el('h3',{},'Notes'),el('p',{},inv.notes)):null),
       el('section',{class:'panel'},el('h2',{class:'panel-title'},`Offerings — ${money(totalCommitted)} committed`),
         !inv.subscriptions.length?emptyState('Not on any offering yet.'):
@@ -4745,9 +5226,20 @@ function suggestionCard(s,onDone){
     el('div',{class:'suggest-actions'},accept,open,dismiss));
 }
 // `scope` is an offering id, or null for everything.
+// Sorted before it is cut. With the exemption checks in, the strip is long
+// enough that whatever sits in the first five decides what gets seen — and a
+// Form D running out of days should not be below a nudge about letterhead.
+// Within a severity the order the checks ran in is kept, which groups them by
+// offering and reads as the file does.
+const SUGGEST_RANK={warn:0,info:1};
+function bySeverity(list){
+  return list.map((s,i)=>[s,i]).sort((a,b)=>
+    (SUGGEST_RANK[a[0].severity]??1)-(SUGGEST_RANK[b[0].severity]??1)||a[1]-b[1]).map(x=>x[0]);
+}
 function suggestionPanel(scope,onDone,{limit=6,heading='Suggested'}={}){
-  const all=computeSuggestions(scope);
+  const all=bySeverity(computeSuggestions(scope));
   if(!all.length)return null;
+  let expanded=false;
   const shown=all.slice(0,limit);
   const applicable=all.filter(s=>s.apply);
   const acceptAll=applicable.length>1?el('button',{class:'btn btn-ghost btn-sm',type:'button',onclick:async()=>{
@@ -4772,9 +5264,18 @@ function suggestionPanel(scope,onDone,{limit=6,heading='Suggested'}={}){
         el('span',{class:'muted-text',style:'font-weight:400;letter-spacing:0;text-transform:none;margin-left:8px'},
           `${all.length} thing${all.length===1?'':'s'} the record can already fill in`)),
       acceptAll),
-    el('div',{class:'suggest'},...shown.map(s=>suggestionCard(s,onDone))),
-    all.length>shown.length?el('p',{class:'field-help',style:'margin:10px 0 0'},
-      `${all.length-shown.length} more not shown.`):null);
+    (()=>{
+      const list=el('div',{class:'suggest'},...shown.map(s=>suggestionCard(s,onDone)));
+      const more=all.length>shown.length
+        ?el('button',{class:'btn btn-ghost btn-sm',style:'margin-top:10px',type:'button',onclick:()=>{
+            expanded=!expanded;
+            clear(list);
+            (expanded?all:shown).forEach(s=>list.appendChild(suggestionCard(s,onDone)));
+            more.textContent=expanded?'Show fewer':`Show all ${all.length}`;
+          }},`Show all ${all.length}`)
+        :null;
+      return el('div',{},list,more);
+    })());
 }
 
 /* ============================================================================

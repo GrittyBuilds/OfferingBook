@@ -45,6 +45,10 @@ ok(after.activity >= 1 && after.lastAct.kind === 'accepted', 'the acceptance is 
 ok(await p.locator('.suggest-card', { hasText: 'File Form D' }).count() === 0, 'the accepted card left the strip')
 
 // --- 2. Dismissals stick --------------------------------------------------
+// The strip shows the most serious few and hides the rest behind "Show all".
+// The firm-details nudge is the mildest thing on it, so open the list first.
+const showAll = p.locator('.suggest-panel button', { hasText: 'Show all' })
+if (await showAll.count()) { await showAll.first().evaluate(b => b.click()); await p.waitForTimeout(300) }
 const dismissCard = p.locator('.suggest-card', { hasText: 'firm details' })
 if (await dismissCard.count()) {
   await dismissCard.locator('button[aria-label="Dismiss this suggestion"]').click()
