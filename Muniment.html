@@ -349,6 +349,25 @@ a{color:inherit;text-decoration:none}
 .report-badge.no{border-color:#97302F;color:#97302F}
 .report-foot{margin-top:22px;padding-top:8px;border-top:1px solid #A8813C;font-size:9.5px;color:#555;line-height:1.55}
 
+/* ---- The certificate ------------------------------------------------------
+   One page, and it should read as a document rather than a screen: a rule in
+   brass, the class set in the serif, and room around the statement itself. */
+.cert-doc{border:2px solid #14453F;padding:30px 34px 26px;position:relative}
+.cert-doc::after{content:'';position:absolute;inset:6px;border:1px solid #A8813C;pointer-events:none}
+.cert-head{text-align:center;margin:14px 0 22px}
+.cert-issuer{font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:#555;font-weight:700}
+.cert-head h1{font-family:var(--font-serif);font-weight:400;font-size:25px;margin:6px 0 8px;color:#14453F;letter-spacing:-.01em}
+.cert-number{font-size:11px;color:#555;letter-spacing:.06em}
+.cert-number .mono{font-family:var(--font-mono);font-weight:700;color:#14181C}
+.cert-body{font-size:12.5px;line-height:1.75;margin:0 0 20px;text-align:justify}
+.cert-table{margin-bottom:20px}
+.cert-table th[scope=row]{width:38%;background:#FAF9F6;color:#14453F;font-size:9px;letter-spacing:.1em;text-transform:uppercase}
+.cert-void{border:1.5px solid #97302F;color:#97302F;padding:7px 11px;font-weight:700;font-size:11px;margin:0 0 18px}
+.cert-sign{display:flex;gap:34px;margin-top:34px}
+.cert-sig{flex:1}
+.cert-rule{border-bottom:1px solid #333;height:28px}
+.cert-cap{font-size:9.5px;color:#555;padding-top:5px}
+
 /* ══════════════════════════════════════════════════════════════════════════
    PREMIUM LAYER
    Everything above this line is the brand base: the palette, measured against
@@ -4739,7 +4758,10 @@ async function investorsTab(state,drawTab,reloadOffering){
     showCosts?el('span',{},el('strong',{},money(committed+costs)),' total due'):null);
   return el('div',{},
     calls?capitalCallsPanel(offering,calls,refreshTab):null,
-    el('div',{class:'section-head'},el('div',{},el('h2',{},'Investors'),figures),addBtn),
+    el('div',{class:'section-head'},el('div',{},el('h2',{},'Investors'),figures),
+      el('div',{style:'display:flex;gap:8px;flex-wrap:wrap'},
+        subs.length?el('button',{class:'btn btn-ghost btn-sm',onclick:()=>exportRoster(offering,subs)},'@icon:download','CSV'):null,
+        addBtn)),
     !subs.length?emptyState('No investors on this offering yet.',state.investors.length?null:el('a',{class:'btn btn-ghost',onclick:()=>navigate('/investors')},'Add investors to your contact book first')):
     dataTable([
       {label:'Investor',primary:true,render:s=>[
@@ -4774,7 +4796,10 @@ async function escrowTab(state,drawTab,reloadOffering){
     el('div',{class:'stat-row'},statCard('Cleared balance',money(summary.clearedBalance),{kind:'accent',sub:'settled at bank'}),
       statCard('Pending',money(summary.pendingBalance),{sub:'not yet cleared'}),statCard('Deposits',money(summary.deposits),{kind:'success'}),
       statCard('Out (release/refund/fee)',money(summary.releases+summary.refunds+summary.fees),{sub:`${money(summary.releases)} released`})),
-    el('div',{class:'section-head'},el('h2',{},'Escrow ledger'),addBtn),
+    el('div',{class:'section-head'},el('h2',{},'Escrow ledger'),
+      el('div',{style:'display:flex;gap:8px;flex-wrap:wrap'},
+        transactions.length?el('button',{class:'btn btn-ghost btn-sm',onclick:()=>exportEscrow(state.offering,transactions)},'@icon:download','CSV'):null,
+        addBtn)),
     !transactions.length?emptyState('No escrow activity recorded yet.'):
     dataTable([
       {label:'Entry',primary:true,render:t=>[
@@ -5532,7 +5557,10 @@ async function certificatesTab(state,drawTab,reloadOffering){
         :statCard('Accrued return',money(totalAccrued),{sub:asOf===today?'to today':`to ${fmtDate(asOf)}`})),
     asOfRow,
     classStructurePanel(offering,classNames),
-    el('div',{class:'section-head'},el('h2',{},'Certificate roster'),el('div',{style:'display:flex;gap:8px'},renumBtn,addBtn)),
+    el('div',{class:'section-head'},el('h2',{},'Certificate roster'),
+      el('div',{style:'display:flex;gap:8px;flex-wrap:wrap'},
+        certificates.length?el('button',{class:'btn btn-ghost btn-sm',onclick:()=>exportCapTable(offering,data)},'@icon:download','CSV'):null,
+        renumBtn,addBtn)),
     !certificates.length
       ? emptyState('No certificates issued yet. They are created automatically when you conduct a closing, or add one manually.',el('button',{class:'btn btn-primary',onclick:()=>openCertificateForm(offering,investors,allClassNames,null,()=>refresh())},'Add a certificate'))
       : el('div',{},...[...groups.entries()].map(([cls,certs])=>certClassPanel(cls,certs,offering,investors,allClassNames))),
@@ -5605,6 +5633,7 @@ function certClassPanel(cls,certs,offering,investors,classNames){
       anyPaid?{label:'Outstanding',num:true,render:c=>c.accrued_outstanding!=null?money(c.accrued_outstanding):'—'}:null,
       {label:'Issued',hide:true,render:c=>fmtDate(c.issue_date)},
       {label:'',cls:'row-actions',render:c=>rowActions(
+        iconButton('print',`Print certificate ${c.cert_number}`,()=>printCertificate(offering.id,c.id)),
         iconButton('edit',`Edit certificate ${c.cert_number}`,()=>openCertificateForm(offering,investors,classNames,c,()=>refresh())),
         iconButton('trash',`Delete certificate ${c.cert_number}`,async()=>{
           const ok=await confirmDialog(`Delete certificate ${c.cert_number}?`,{danger:true,confirmLabel:'Delete'});
@@ -5684,6 +5713,7 @@ function openCertificateForm(offering,investors,classNames,existing,onDone){
 async function renderInvestors(){
   const investors=await api.listInvestors();
   const addBtn=el('button',{class:'btn btn-primary',onclick:()=>openInvestorForm(null,i=>navigate(`/investors/${i.id}`))},'@icon:plus','New investor');
+  const csvBtn=investors.length?el('button',{class:'btn btn-ghost',onclick:()=>exportContacts(investors)},'@icon:download','CSV'):null;
   // Group into sections by investor type; individuals shown Last, First M.
   const groups=new Map();
   for(const i of investors){const k=i.entity_type||'Other';if(!groups.has(k))groups.set(k,[]);groups.get(k).push(i);}
@@ -5722,7 +5752,7 @@ async function renderInvestors(){
           const show=!q||(tr.dataset.search||'').includes(q);
           tr.style.display=show?'':'none';if(show)any=true;});
         sec.style.display=any?'':'none';});}});
-  return el('div',{},pageHeader('Investors',{subtitle:`${investors.length} contact${investors.length===1?'':'s'} in your contact book`,actions:[addBtn],inBar:true}),
+  return el('div',{},pageHeader('Investors',{subtitle:`${investors.length} contact${investors.length===1?'':'s'} in your contact book`,actions:[csvBtn,addBtn],inBar:true}),
     !investors.length?emptyState('No investors yet.',el('button',{class:'btn btn-primary',onclick:()=>openInvestorForm(null,i=>navigate(`/investors/${i.id}`))},'Add your first investor')):
     el('div',{},el('div',{class:'toolbar'},search),sections));
 }
@@ -5735,7 +5765,10 @@ async function renderInvestor(id){
       navigate('/investors');}catch(e){toast(e.message,'error');}}
   return el('div',{class:'view-investor'},
     pageHeader(dName,{back:{href:'#/investors',label:'All investors'},subtitle:inv.entity_type+(inv.contact_name?` · ${inv.contact_name}`:''),
-      actions:[el('button',{class:'btn btn-ghost',onclick:()=>openInvestorForm(inv,()=>refresh())},'Edit'),el('button',{class:'btn btn-danger-ghost',onclick:del},'Delete')]}),
+      actions:[
+        el('button',{class:'btn btn-ghost',onclick:()=>printInvestorStatement(inv.id)},'@icon:print','Print statement'),
+        el('button',{class:'btn btn-ghost',onclick:()=>openInvestorForm(inv,()=>refresh())},'Edit'),
+        el('button',{class:'btn btn-danger-ghost',onclick:del},'Delete')]}),
     el('div',{class:'grid-2'},
       el('section',{class:'panel'},el('h2',{class:'panel-title'},'Contact & accreditation'),
         detailGrid([['Type',inv.entity_type],['SSN / EIN',fmtTaxId(inv.tax_id)],
@@ -5909,21 +5942,335 @@ function buildSummaryReport(o,subs,escrowData,reconData,closingsData,certsData){
   );
 }
 
+// Put a built document on the page, print it, and take it away again. Shared
+// by every report, so none of them can forget the cleanup that stops a later
+// plain Ctrl+P printing yesterday's report by surprise.
+function printDocument(build,{failure='Could not build the document'}={}){
+  try{
+    const root=document.getElementById('print-root');clear(root);
+    root.appendChild(build());
+    let done=false;
+    const cleanup=()=>{if(done)return;done=true;clear(root);window.removeEventListener('afterprint',cleanup);};
+    window.addEventListener('afterprint',cleanup);
+    setTimeout(()=>{window.print();
+      // iOS Safari never fires afterprint; clear on a timer too.
+      setTimeout(cleanup,1500);},60);
+  }catch(e){toast(failure+': '+e.message,'error');}
+}
+
 async function printOfferingSummary(offeringId){
   try{
     const[offering,subs,escrowData,reconData,closingsData,certsData]=await Promise.all([
       api.getOffering(offeringId),api.listSubscriptions(offeringId),api.listEscrow(offeringId),
       api.listReconciliations(offeringId),api.listClosings(offeringId),api.listCertificates(offeringId)]);
-    const root=document.getElementById('print-root');clear(root);
-    root.appendChild(buildSummaryReport(offering,subs,escrowData,reconData,closingsData,certsData));
-    let done=false;
-    const cleanup=()=>{if(done)return;done=true;clear(root);window.removeEventListener('afterprint',cleanup);};
-    window.addEventListener('afterprint',cleanup);
-    setTimeout(()=>{window.print();
-      // iOS Safari never fires afterprint; clear on a timer so a later plain
-      // Ctrl+P cannot print this report again by surprise.
-      setTimeout(cleanup,1500);},60);
+    printDocument(()=>buildSummaryReport(offering,subs,escrowData,reconData,closingsData,certsData),
+      {failure:'Could not build the summary'});
   }catch(e){toast('Could not build the summary: '+e.message,'error');}
+}
+
+/* ============================================================================
+   THE CERTIFICATE
+
+   The app computed the number, the class, the capital, the percentage, the
+   rate and the issue date, and then had no way to print a certificate. An
+   application named for a muniment of title did not produce one.
+
+   It is deliberately plain: a statement of what the record holds, with the
+   figures that were computed and the ones that were entered, and a footer
+   that does not pretend to be the instrument itself. The executed operating
+   agreement or subscription agreement is the instrument; this evidences it.
+   ========================================================================== */
+async function printCertificate(offeringId,certId){
+  try{
+    const[offering,data]=await Promise.all([api.getOffering(offeringId),api.listCertificates(offeringId)]);
+    const cert=data.certificates.find(c=>c.id===Number(certId));
+    if(!cert)throw new Error('Certificate not found');
+    printDocument(()=>buildCertificate(offering,cert,data),{failure:'Could not build the certificate'});
+  }catch(e){toast('Could not build the certificate: '+e.message,'error');}
+}
+function buildCertificate(o,c,data){
+  const cfg=settings();
+  const chain=certificateChain(c.id);
+  const priorNumbers=chain.slice(0,-1).map(x=>x.cert_number).filter(Boolean);
+  const inv=c.investor_id?db.investors.find(i=>i.id===c.investor_id):null;
+  const units=(()=>{
+    const sub=c.subscription_id?db.subscriptions.find(s=>s.id===c.subscription_id):null;
+    if(sub&&sub.units!=null)return sub.units;
+    const price=inherited(scopeFor({offering:o,subscription:sub||undefined}),'price_per_unit_cents');
+    if(!price||c.capital_cents==null)return null;
+    const raw=c.capital_cents/price;
+    return o.fractional_allowed?+raw.toFixed(6):(Math.abs(raw-Math.round(raw))<1e-6?Math.round(raw):null);
+  })();
+  return el('div',{class:'cert-doc'},
+    el('div',{class:'report-lockup'},
+      el('span',{html:REPORT_MARK}),
+      el('span',{class:'rl-name'},'Muniment')),
+    el('div',{class:'cert-head'},
+      el('div',{class:'cert-issuer'},o.issuer_name||o.name),
+      el('h1',{},'Certificate of ',c.class_name||o.security_type||'Interest'),
+      el('div',{class:'cert-number'},'No. ',el('span',{class:'mono'},c.cert_number||'—'))),
+    el('p',{class:'cert-body'},
+      'This certifies that ',
+      el('strong',{},c.holder_name||(inv?investorDisplayName(inv):'—')),
+      ' is the registered holder of ',
+      units!=null?el('strong',{},`${units} ${units===1?'unit':'units'}`):el('strong',{},'the interest recorded below'),
+      ' of ',el('strong',{},c.class_name||o.security_type||'the issuer'),
+      ' in ',el('strong',{},o.issuer_name||o.name),
+      ', representing ',el('strong',{},fmtPct(c.total_pct_shown)),
+      ' of the total interests outstanding as at the date below, transferable only in accordance with the governing instruments and applicable securities laws.'),
+    el('table',{class:'report-table cert-table'},
+      el('tbody',{},
+        ...[
+          ['Holder',c.holder_name||(inv?investorDisplayName(inv):'—')],
+          inv&&inv.entity_type?['Holder type',inv.entity_type]:null,
+          ['Class / series',c.class_name||'—'],
+          ['Capital contributed',c.capital_cents!=null?money(c.capital_cents):(c.no_capital?'None — issued for consideration other than cash':'—')],
+          units!=null?['Units',String(units)]:null,
+          ['Percentage of class',fmtPct(c.pct_of_class_shown)],
+          ['Percentage of the issuer',fmtPct(c.total_pct_shown)],
+          c.pref_return_rate!=null?['Preferred return',`${fmtRate(c.pref_return_rate)} per annum, ${accrualConvention(c.accrual_convention_calc).label.toLowerCase()}`]:null,
+          c.accrual_start?['Accruing from',fmtDateLong(c.accrual_start)]:null,
+          ['Funded',c.funded_date?fmtDateLong(c.funded_date):'—'],
+          ['Issued',c.issue_date?fmtDateLong(c.issue_date):'—'],
+          o.exemption?['Offering exemption',o.exemption]:null,
+          priorNumbers.length?['Issued on transfer of',priorNumbers.join(', ')]:null,
+          c.cancelled_date?['Cancelled',fmtDateLong(c.cancelled_date)]:null,
+        ].filter(Boolean).map(([k,v])=>el('tr',{},el('th',{scope:'row'},k),el('td',{},v))))),
+    c.cancelled_date?el('p',{class:'cert-void'},'This certificate has been cancelled and is reproduced for the record only.'):null,
+    el('div',{class:'cert-sign'},
+      el('div',{class:'cert-sig'},el('div',{class:'cert-rule'}),el('div',{class:'cert-cap'},'Authorised signatory, ',o.issuer_name||o.name)),
+      el('div',{class:'cert-sig'},el('div',{class:'cert-rule'}),el('div',{class:'cert-cap'},'Date'))),
+    el('div',{class:'report-foot'},
+      (cfg.firm_name?`Prepared by ${cfg.firm_name}. `:''),
+      'This certificate evidences the interest recorded in the issuer’s books as at ',fmtDateLong(data.asOf||todayISO()),
+      '. It is not the instrument creating that interest: the executed subscription agreement and governing documents are. ',
+      (cfg.report_footer||DEFAULT_REPORT_FOOTER)));
+}
+
+/* ============================================================================
+   THE HOLDER'S STATEMENT
+
+   Everything a client statement needs was already assembled on the investor
+   page — subscriptions across offerings, what was funded and when,
+   certificates, accrued return — and there was no way to print it. This is
+   the document a firm sends most often.
+   ========================================================================== */
+async function printInvestorStatement(investorId){
+  try{
+    const inv=await api.getInvestor(investorId);
+    printDocument(()=>buildInvestorStatement(inv),{failure:'Could not build the statement'});
+  }catch(e){toast('Could not build the statement: '+e.message,'error');}
+}
+function buildInvestorStatement(inv){
+  const cfg=settings();
+  const asOf=todayISO();
+  const dName=investorDisplayName(inv);
+  // Every certificate this holder holds, across every offering they are on.
+  const holdings=[];
+  for(const o of db.offerings){
+    const r=computeCertificates(o.id,asOf);
+    for(const c of r.certificates)
+      if(c.investor_id===inv.id)holdings.push({offering:o,cert:c});
+  }
+  const paid=[];
+  for(const d of db.distributions){
+    const mine=(d.allocations||[]).filter(a=>a.investor_id===inv.id);
+    if(!mine.length)continue;
+    const o=db.offerings.find(x=>x.id===d.offering_id);
+    paid.push({offering:o,dist:d,
+      pref:mine.reduce((a,x)=>a+(x.pref_cents||0),0),
+      capital:mine.reduce((a,x)=>a+(x.capital_cents||0),0)});
+  }
+  paid.sort((a,b)=>String(a.dist.pay_date||'').localeCompare(String(b.dist.pay_date||'')));
+  const committed=inv.subscriptions.reduce((a,s)=>a+(s.amount_committed_cents||0),0);
+  const received=inv.subscriptions.reduce((a,s)=>a+Math.max(0,investorEscrow(s.offering_id,inv.id,s.id).clearedNet),0);
+  const capital=holdings.reduce((a,h)=>a+(h.cert.capital_cents||0),0);
+  const owed=holdings.reduce((a,h)=>a+(h.cert.accrued_outstanding||0),0);
+  const paidTotal=paid.reduce((a,p)=>a+p.pref+p.capital,0);
+
+  return el('div',{},
+    el('div',{class:'report-lockup'},el('span',{html:REPORT_MARK}),el('span',{class:'rl-name'},'Muniment')),
+    el('div',{class:'report-head'},
+      el('div',{},el('h1',{},dName),
+        el('div',{class:'report-sub'},'Holder’s statement'+(cfg.firm_name?` · ${cfg.firm_name}`:''))),
+      el('div',{class:'report-meta'},
+        el('div',{},el('strong',{},'As at '),fmtDateLong(asOf)),
+        cfg.firm_address?el('div',{},cfg.firm_address):null,
+        cfg.firm_contact?el('div',{},cfg.firm_contact):null)),
+    reportSection('The holder',reportKV([
+      ['Type',inv.entity_type],
+      inv.contact_name?['Contact',inv.contact_name]:null,
+      ['SSN / EIN',cfg.mask_account_numbers?fmtTaxId(inv.tax_id):(inv.tax_id||'—')],
+      inv.email?['Email',inv.email]:null,
+      inv.phone?['Telephone',inv.phone]:null,
+      investorState(inv)?['State',stateName(investorState(inv))]:null,
+      ['Accreditation',inv.accredited_status],
+      inv.accreditation_basis?['Established by',inv.accreditation_basis]:null,
+      inv.accredited_verified_date?['Verified',fmtDateLong(inv.accredited_verified_date)]:null,
+    ])),
+    reportSection('Position',reportKV([
+      ['Committed across all offerings',money(committed)],
+      ['Funds received',money(received)],
+      ['Capital on certificate',money(capital)],
+      ['Preferred return outstanding',money(owed)],
+      ['Distributions received',money(paidTotal)],
+    ])),
+    inv.subscriptions.length?reportSection('Subscriptions',
+      el('table',{class:'report-table'},
+        el('thead',{},el('tr',{},el('th',{},'Offering'),el('th',{},'Status'),
+          el('th',{class:'num'},'Committed'),el('th',{class:'num'},'Received'),el('th',{},'Signed'),el('th',{},'Funded'))),
+        el('tbody',{},...inv.subscriptions.map(s=>el('tr',{style:s.status==='Withdrawn'?'text-decoration:line-through;color:#777':''},
+          el('td',{},s.offering_name),el('td',{},s.status),
+          el('td',{class:'num'},money(s.amount_committed_cents)),
+          el('td',{class:'num'},money(Math.max(0,investorEscrow(s.offering_id,inv.id,s.id).clearedNet))),
+          el('td',{},fmtDate(s.sub_signed_date)),el('td',{},fmtDate(s.funded_date))))),
+        el('tfoot',{},el('tr',{},el('td',{colspan:'2'},`${inv.subscriptions.length} subscription${inv.subscriptions.length===1?'':'s'}`),
+          el('td',{class:'num'},money(committed)),el('td',{class:'num'},money(received)),
+          el('td',{},''),el('td',{},''))))):null,
+    holdings.length?reportSection('Certificates held',
+      el('table',{class:'report-table'},
+        el('thead',{},el('tr',{},el('th',{},'Offering'),el('th',{},'No.'),el('th',{},'Class'),
+          el('th',{class:'num'},'Capital'),el('th',{class:'num'},'% of issuer'),
+          el('th',{class:'num'},'Accrued'),el('th',{class:'num'},'Outstanding'),el('th',{},'Issued'))),
+        el('tbody',{},...holdings.map(h=>el('tr',{},
+          el('td',{},h.offering.name),el('td',{},h.cert.cert_number),el('td',{},h.cert.class_name||'—'),
+          el('td',{class:'num'},h.cert.capital_cents!=null?money(h.cert.capital_cents):'—'),
+          el('td',{class:'num'},fmtPct(h.cert.total_pct_shown)),
+          el('td',{class:'num'},h.cert.accrued_calc!=null?money(h.cert.accrued_calc):'—'),
+          el('td',{class:'num'},h.cert.accrued_outstanding!=null?money(h.cert.accrued_outstanding):'—'),
+          el('td',{},fmtDate(h.cert.issue_date))))),
+        el('tfoot',{},el('tr',{},el('td',{colspan:'3'},`${holdings.length} certificate${holdings.length===1?'':'s'}`),
+          el('td',{class:'num'},money(capital)),el('td',{},''),el('td',{},''),
+          el('td',{class:'num'},money(owed)),el('td',{},''))))):null,
+    paid.length?reportSection('Distributions received',
+      el('table',{class:'report-table'},
+        el('thead',{},el('tr',{},el('th',{},'Date'),el('th',{},'Offering'),el('th',{},'Distribution'),
+          el('th',{class:'num'},'Preferred return'),el('th',{class:'num'},'Capital'),el('th',{class:'num'},'Total'))),
+        el('tbody',{},...paid.map(p=>el('tr',{},
+          el('td',{},fmtDate(p.dist.pay_date)),el('td',{},p.offering?p.offering.name:'—'),el('td',{},p.dist.label),
+          el('td',{class:'num'},money(p.pref)),el('td',{class:'num'},money(p.capital)),
+          el('td',{class:'num'},money(p.pref+p.capital))))),
+        el('tfoot',{},el('tr',{},el('td',{colspan:'3'},`${paid.length} distribution${paid.length===1?'':'s'}`),
+          el('td',{class:'num'},money(paid.reduce((a,p)=>a+p.pref,0))),
+          el('td',{class:'num'},money(paid.reduce((a,p)=>a+p.capital,0))),
+          el('td',{class:'num'},money(paidTotal)))))):null,
+    inv.notes?reportSection('Notes',el('p',{},inv.notes)):null,
+    el('div',{class:'report-foot'},
+      (cfg.firm_name?`Prepared by ${cfg.firm_name}. `:''),
+      (cfg.report_footer||DEFAULT_REPORT_FOOTER)));
+}
+
+/* ============================================================================
+   CSV
+
+   There was no export of any kind. The roster, the escrow ledger and the cap
+   table all eventually have to leave the app for somebody with a spreadsheet,
+   and a JSON backup is not that.
+
+   The columns are declared here rather than borrowed from the screen: a table
+   column renders nodes for a person to look at, and a CSV column carries a
+   value for a machine to add up. Sharing them would mean stripping markup
+   back out of the one to make the other.
+   ========================================================================== */
+// Excel reads a leading =, +, - or @ as a formula, so a value that starts with
+// one is prefixed with a quote. A cap table is not a place to execute anything.
+function csvCell(v){
+  if(v===null||v===undefined)return '';
+  let s=String(v);
+  if(/^[=+\-@\t\r]/.test(s))s="'"+s;
+  return /[",\n\r]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s;
+}
+function toCSV(columns,rows){
+  const head=columns.map(c=>csvCell(c.label)).join(',');
+  const body=rows.map(r=>columns.map(c=>csvCell(c.value(r))).join(','));
+  // CRLF and a BOM: what Excel expects, and what stops it mangling accents.
+  return '﻿'+[head,...body].join('\r\n')+'\r\n';
+}
+function downloadCSV(filename,text){
+  const blob=new Blob([text],{type:'text/csv;charset=utf-8'});
+  const url=URL.createObjectURL(blob);
+  const a=el('a',{href:url,download:filename});document.body.appendChild(a);a.click();a.remove();
+  URL.revokeObjectURL(url);
+  toast(`${filename} downloaded.`,'success');
+}
+// Money leaves as a plain decimal number, not a formatted string: a
+// spreadsheet should be able to add the column up.
+const csvMoney=c=>c===null||c===undefined?'':(c/100).toFixed(2);
+function csvFilename(offering,what){
+  const slug=String((offering&&offering.name)||'muniment').toLowerCase()
+    .replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,40)||'muniment';
+  return `${slug}-${what}-${todayISO()}.csv`;
+}
+
+function exportRoster(offering,subs){
+  downloadCSV(csvFilename(offering,'roster'),toCSV([
+    {label:'Investor',value:s=>s.investor_name},
+    {label:'Type',value:s=>s.entity_type},
+    {label:'Status',value:s=>s.status},
+    {label:'Accredited',value:s=>s.accredited_status},
+    {label:'Email',value:s=>s.email},
+    {label:'Phone',value:s=>s.phone},
+    {label:'Committed',value:s=>csvMoney(s.amount_committed_cents)},
+    {label:'Received',value:s=>csvMoney(Math.max(0,investorEscrow(offering.id,s.investor_id,s.id).clearedNet))},
+    {label:'Costs',value:s=>csvMoney(s.costs_cents)},
+    {label:'Units',value:s=>s.units},
+    {label:'Tranche',value:s=>{const t=(offering.tranches||[]).find(x=>x.id===s.tranche_id);return t?t.name:'';}},
+    {label:'Subscription sent',value:s=>s.sub_sent_date},
+    {label:'Subscription signed',value:s=>s.sub_signed_date},
+    {label:'Funded',value:s=>s.funded_date},
+    {label:'Notes',value:s=>s.notes},
+  ],subs));
+}
+function exportEscrow(offering,transactions){
+  downloadCSV(csvFilename(offering,'escrow'),toCSV([
+    {label:'Date',value:t=>t.txn_date},
+    {label:'Type',value:t=>t.txn_type},
+    {label:'Investor',value:t=>t.investor_name},
+    {label:'Amount',value:t=>csvMoney(t.amount_cents)},
+    // Signed, so a spreadsheet can total the column into a balance.
+    {label:'Signed amount',value:t=>csvMoney((SIGN[t.txn_type]||0)*(t.amount_cents||0))},
+    {label:'Cleared',value:t=>t.cleared?'Yes':'No'},
+    {label:'Method',value:t=>t.method},
+    {label:'Reference',value:t=>t.reference},
+    {label:'Notes',value:t=>t.notes},
+  ],transactions));
+}
+function exportCapTable(offering,data){
+  downloadCSV(csvFilename(offering,'cap-table'),toCSV([
+    {label:'Certificate',value:c=>c.cert_number},
+    {label:'Holder',value:c=>c.holder_name},
+    {label:'Class',value:c=>c.class_name},
+    {label:'Capital',value:c=>csvMoney(c.capital_cents)},
+    {label:'% of class',value:c=>c.pct_of_class_shown},
+    {label:'% of issuer',value:c=>c.total_pct_shown},
+    {label:'Preferred rate',value:c=>c.pref_return_rate},
+    {label:'Accrues',value:c=>accrualConvention(c.accrual_convention_calc).label},
+    {label:'Accrued',value:c=>csvMoney(c.accrued_calc)},
+    {label:'Paid',value:c=>csvMoney(c.pref_paid_cents)},
+    {label:'Outstanding',value:c=>csvMoney(c.accrued_outstanding)},
+    {label:'Funded',value:c=>c.funded_date},
+    {label:'Issued',value:c=>c.issue_date},
+    {label:'As at',value:()=>data.asOf},
+  ],data.certificates));
+}
+function exportContacts(investors){
+  downloadCSV(`muniment-contacts-${todayISO()}.csv`,toCSV([
+    {label:'Name',value:i=>investorListName(i)},
+    {label:'Type',value:i=>i.entity_type},
+    {label:'Contact',value:i=>i.contact_name},
+    {label:'Email',value:i=>i.email},
+    {label:'Phone',value:i=>i.phone},
+    {label:'Address',value:i=>i.address},
+    {label:'State',value:i=>investorState(i)},
+    // Taxpayer numbers are the reason this file needs looking after; they are
+    // masked here as they are everywhere else, and the note says so.
+    {label:'SSN / EIN (masked)',value:i=>fmtTaxId(i.tax_id)},
+    {label:'Accredited',value:i=>i.accredited_status},
+    {label:'Established by',value:i=>i.accreditation_basis},
+    {label:'Verified',value:i=>i.accredited_verified_date},
+    {label:'Evidence dated',value:i=>i.accredited_evidence_date},
+    {label:'Offerings',value:i=>i.offering_count},
+  ],investors));
 }
 
 /* ============================================================================
