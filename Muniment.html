@@ -723,6 +723,17 @@ textarea{min-height:70px;resize:vertical;line-height:1.55}
   color:var(--muted);font-size:var(--t-base);background:var(--surface-2);
 }
 
+/* ---- As-at date row ------------------------------------------------------
+   A roster that answers "as at when" needs to say so on the page, not only in
+   the figures. */
+.asof-row{
+  display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+  padding:10px 14px;margin:0 0 18px;
+  background:var(--surface-2);border:var(--hairline);border-radius:var(--radius-sm);
+}
+.asof-label{font-size:var(--t-sm);font-weight:650;letter-spacing:var(--track-label);text-transform:uppercase;color:var(--muted)}
+.asof-row .inline-input{max-width:190px}
+
 /* ---- Protection state --------------------------------------------------- */
 .protect-state{display:flex;flex-direction:column;align-items:flex-start;gap:2px}
 .protect-state p{max-width:68ch}
@@ -2178,18 +2189,86 @@ function offeringSummary(o){
     closingsCount:closings.length,totalReleased:closings.reduce((a,c)=>a+(c.amount_released_cents||0),0)};
 }
 
-/* ---- Certificate computation (% interest, accrued return) --------------- */
-// Whole days from a 'YYYY-MM-DD' date to today (never negative). Used for accrual.
-function daysSince(dateStr){
-  const t=dayOf(dateStr);if(!t)return null;
-  const now=new Date();const t0=new Date(now.getFullYear(),now.getMonth(),now.getDate());
-  return Math.max(0,Math.round((t0-t)/86400000));
+/* ---- Certificate computation (% interest, accrued return) ---------------
+   Everything here takes an as-of date. It used to measure to today and only
+   to today, which meant a figure that moved every morning — including on a
+   report headed with an as-of date, where the two then disagreed. "Who owned
+   what on 30 June, and what had accrued by then" is the question a closing
+   binder, a redemption and a distribution all begin with. */
+// Whole days between two 'YYYY-MM-DD' dates (never negative). Used for accrual.
+function daysBetween(fromStr,toStr){
+  const a=dayOf(fromStr),b=dayOf(toStr);if(!a||!b)return null;
+  return Math.max(0,Math.round((b-a)/86400000));
+}
+// Whole days from a date to the as-of date, defaulting to today.
+function daysSince(dateStr,asOf){return daysBetween(dateStr,asOf||todayISO());}
+
+/* ---- Accrual conventions -------------------------------------------------
+   The old arithmetic was simple interest on a 365-day year, everywhere, with
+   no way to say otherwise — while real preferred returns are frequently
+   compounded, and frequently computed 30/360. The convention belongs beside
+   the rate it modifies rather than inside the formula, so it sits on the
+   class, the tranche and the offering, and every certificate written before
+   this carries 'simple/365' explicitly (see MIGRATIONS). */
+const ACCRUAL_CONVENTIONS=[
+  {value:'simple/365',label:'Simple interest, actual/365',basis:365,compound:0},
+  {value:'simple/360',label:'Simple interest, 30/360',basis:360,compound:0,thirty360:true},
+  {value:'annual/365',label:'Compounded annually, actual/365',basis:365,compound:1},
+  {value:'quarterly/365',label:'Compounded quarterly, actual/365',basis:365,compound:4},
+  {value:'monthly/365',label:'Compounded monthly, actual/365',basis:365,compound:12},
+];
+const ACCRUAL_BY_VALUE=new Map(ACCRUAL_CONVENTIONS.map(c=>[c.value,c]));
+function accrualConvention(v){return ACCRUAL_BY_VALUE.get(v)||ACCRUAL_BY_VALUE.get('simple/365');}
+// Days on a 30/360 basis: every month is 30 days and every year 360, which is
+// what a note drafted that way means by "days".
+function days30360(fromStr,toStr){
+  const a=dayOf(fromStr),b=dayOf(toStr);if(!a||!b||b<a)return 0;
+  let d1=a.getDate(),d2=b.getDate();
+  if(d1>30)d1=30;
+  if(d2>30&&d1>=30)d2=30;
+  return Math.max(0,(b.getFullYear()-a.getFullYear())*360+(b.getMonth()-a.getMonth())*30+(d2-d1));
+}
+// What has accrued on `capital` at `rate` per cent per annum between two
+// dates, under the named convention. Returns cents, or null if it cannot say.
+function accrue(capitalCents,rate,startDate,asOf,conventionName){
+  if(capitalCents==null||rate==null||!startDate)return null;
+  const conv=accrualConvention(conventionName);
+  const days=conv.thirty360?days30360(startDate,asOf||todayISO()):daysBetween(startDate,asOf||todayISO());
+  if(days==null)return null;
+  const years=days/conv.basis;
+  const r=Number(rate)/100;
+  if(!isFinite(r)||!isFinite(years))return null;
+  if(!conv.compound)return Math.round(capitalCents*r*years);
+  // Compounded n times a year, with the final part-period accrued simply —
+  // interest is not credited for a period that has not ended.
+  const n=conv.compound;
+  const whole=Math.floor(years*n);
+  const grown=capitalCents*Math.pow(1+r/n,whole);
+  const rest=years-whole/n;
+  return Math.round(grown*(1+r*rest)-capitalCents);
 }
 // The default class that cash investors go into (first non-sponsor class).
 function defaultInvestedClass(o){const cls=(o&&Array.isArray(o.classes)?o.classes:[]).filter(c=>!c.sponsor);return cls.length?cls[0].name:null;}
+// What has been paid against a certificate up to a date, split between
+// preferred return and capital. Accrual that has been paid is not still owed,
+// which is what made the old ever-growing figure misleading.
+function distributedTo(certId,asOf){
+  const cut=asOf||todayISO();
+  let pref=0,capital=0;
+  for(const d of db.distributions){
+    if(d.pay_date&&d.pay_date>cut)continue;
+    for(const a of(d.allocations||[])){
+      if(a.certificate_id!==certId)continue;
+      pref+=Number(a.pref_cents)||0;
+      capital+=Number(a.capital_cents)||0;
+    }
+  }
+  return{pref,capital};
+}
 // Enrich an offering's certificates with computed % of class, total % ownership
-// and accrued return to date. Manual per-certificate values always override.
-function computeCertificates(offeringId){
+// and accrued return as at a date. Manual per-certificate values always override.
+function computeCertificates(offeringId,asOf){
+  asOf=asOf||todayISO();
   const o=db.offerings.find(x=>x.id===offeringId);
   const classes=(o&&Array.isArray(o.classes))?o.classes:[];
   const classByName=new Map(classes.map(c=>[c.name,c]));
@@ -2238,12 +2317,23 @@ function computeCertificates(offeringId){
           : pctClass*(remainderPct/Math.max(1,undeclaredNames.size))/100;
       else if(totalCapital>0&&c.capital_cents!=null)totalPct=(c.capital_cents/totalCapital)*100;
       else totalPct=pctClass;}
-    // Accrued return to date: capital × rate × days / 365, from the closing date.
+    // Accrued return as at the as-of date, under the convention this
+    // certificate was written under — never a convention chosen later.
+    const convention=c.accrual_convention||(def&&def.accrual_convention)||o&&o.accrual_convention||settings().default_accrual_convention;
     let accrued=c.accrued_cents;
-    if(accrued==null){const rate=c.pref_return_rate,start=c.accrual_start||c.issue_date||c.funded_date;
-      if(rate!=null&&c.capital_cents!=null&&start){const days=daysSince(start);
-        if(days!=null)accrued=Math.round(c.capital_cents*(rate/100)*(days/365));}}
+    if(accrued==null){
+      const start=c.accrual_start||c.issue_date||c.funded_date;
+      accrued=accrue(c.capital_cents,c.pref_return_rate,start,asOf,convention);
+    }
+    // What distributions have already retired, so the figure on the roster is
+    // what is still owed rather than everything that ever accrued.
+    const paid=distributedTo(c.id,asOf);
     return{...c,pct_of_class_calc:pctClass,total_pct_calc:totalPct,accrued_calc:accrued,
+      accrual_convention_calc:convention,
+      pref_paid_cents:paid.pref,capital_returned_cents:paid.capital,
+      // Accrued, less what has been paid against it. Never below zero: an
+      // over-payment is a return of capital, and is reported as one.
+      accrued_outstanding:accrued==null?null:Math.max(0,accrued-paid.pref),
       class_total_percent:def?def.total_percent:null,class_sponsor:def?!!def.sponsor:false};});
   const classOrder=new Map(classes.map((c,idx)=>[c.name,idx]));
   enriched.sort((a,b)=>{
@@ -2253,15 +2343,53 @@ function computeCertificates(offeringId){
     const ac=a.class_name||'~',bc=b.class_name||'~';if(ac!==bc)return ac.localeCompare(bc);
     const asi=a.sort_index??1e9,bsi=b.sort_index??1e9;if(asi!==bsi)return asi-bsi;
     return String(a.cert_number||'').localeCompare(String(b.cert_number||''),undefined,{numeric:true});});
-  return{offering:o,classes,certificates:enriched,classCapital,classCount,totalCapital,
+  // A cap table whose percentage column reads 99.9999% is taken by whoever is
+  // holding it as an error in the document, not as the rounding artefact it
+  // is. The displayed figures are settled here, by largest remainder, so the
+  // column closes exactly on what it is a share of.
+  settlePercentages(enriched,'total_pct_calc','total_pct_shown',
+    anyClassTotals?Math.min(100,declaredPct+(undeclaredNames.size?remainderPct:0)):100);
+  for(const name of new Set(enriched.map(c=>c.class_name||'Unclassified')))
+    settlePercentages(enriched.filter(c=>(c.class_name||'Unclassified')===name),
+      'pct_of_class_calc','pct_of_class_shown',100);
+  return{offering:o,classes,certificates:enriched,classCapital,classCount,totalCapital,asOf,
     hasClassTotals:anyClassTotals,classNames:[...new Set(raw.map(c=>c.class_name).filter(Boolean))]};
+}
+
+/* ---- Making a percentage column add up -----------------------------------
+   Rounding each share independently leaves the column a basis point short or
+   long. Largest remainder gives the odd units to the rows with the biggest
+   fractional parts, so every displayed figure is within one unit of its exact
+   share and the column totals exactly what it should.
+
+   Rows carrying a manual override are left exactly as entered — someone typed
+   that figure, and it is not this function's business to nudge it. */
+const PCT_PLACES=4;
+function settlePercentages(rows,fromKey,toKey,target){
+  const unit=Math.pow(10,PCT_PLACES);             // work in ten-thousandths of a per cent
+  const live=rows.filter(r=>r[fromKey]!=null&&isFinite(r[fromKey]));
+  for(const r of rows)r[toKey]=r[fromKey];
+  if(!live.length)return;
+  const exact=live.reduce((a,r)=>a+Number(r[fromKey]),0);
+  // Only settle a column that is already trying to be the target. A class
+  // whose shares genuinely sum to 60% must not be inflated to 100%.
+  if(Math.abs(exact-target)>0.5)return;
+  const scaled=live.map(r=>Number(r[fromKey])*unit);
+  const floors=scaled.map(Math.floor);
+  let short=Math.round(target*unit)-floors.reduce((a,n)=>a+n,0);
+  const order=scaled.map((v,i)=>[v-floors[i],i]).sort((a,b)=>b[0]-a[0]||a[1]-b[1]);
+  for(let k=0;k<order.length&&short>0;k++,short--)floors[order[k][1]]++;
+  // A column that came in long gives units back from the smallest remainders.
+  for(let k=order.length-1;k>=0&&short<0;k--,short++)floors[order[k][1]]--;
+  live.forEach((r,i)=>{r[toKey]=floors[i]/unit;});
 }
 // Create certificates for the subscriptions included in a closing. Numbers are
 // assigned in funding-date order, continuing from the highest existing number.
 function generateCertificatesForClosing(offeringId,closing,subIds){
   const o=db.offerings.find(x=>x.id===offeringId);if(!o)return 0;
   const existing=db.certificates.filter(c=>c.offering_id===offeringId);
-  let maxNum=existing.reduce((m,c)=>{const n=parseInt(String(c.cert_number||'').replace(/\D/g,''),10);return isFinite(n)?Math.max(m,n):m;},0);
+  // One rule, read from the offering — the same one the manual form follows.
+  let maxNum=highestCertNumber(offeringId);
   let maxSort=existing.reduce((m,c)=>Math.max(m,c.sort_index||0),0);
   const subs=subIds.map(id=>db.subscriptions.find(s=>s.id===id&&s.offering_id===offeringId))
     .filter(Boolean).filter(s=>s.investor_id).filter(s=>!existing.some(c=>c.subscription_id===s.id));
@@ -2279,7 +2407,11 @@ function generateCertificatesForClosing(offeringId,closing,subIds){
       investor_id:s.investor_id,holder_name:null,class_name:className,capital_cents:s.amount_committed_cents||0,
       pct_of_class:null,percent_interest:null,pref_return_rate:rate,accrued_cents:null,
       funded_date:s.funded_date||closing.closing_date||null,accrual_start:closing.closing_date||null,
-      issue_date:closing.closing_date||null,cert_number:String(maxNum),sort_index:maxSort,no_capital:0,created_at:nowISO()});}
+      issue_date:closing.closing_date||null,cert_number:formatCertNumber(o,maxNum),sort_index:maxSort,no_capital:0,
+      // Written down at issue, so a convention chosen later never restates a
+      // certificate that was computed under the old one.
+      accrual_convention:(tr&&tr.accrual_convention)||o.accrual_convention||settings().default_accrual_convention,
+      created_at:nowISO()});}
   return made;
 }
 
@@ -2477,16 +2609,42 @@ function outstanding(sub,offering){
   const due=subscriptionDue(sub,offering);
   const e=investorEscrow(sub.offering_id,sub.investor_id,sub.id);
   return Math.max(0,due-(e.deposits-e.refunds));}
-// The next certificate number for an offering, following whatever numbering is
-// already in use rather than inventing one.
-// Follows plain sequential numbering only. A roster numbered "A-12" or
-// "2026-001" is deliberately left alone rather than having its prefix stripped
-// and its next number computed as 2026002.
-function nextCertNumber(offeringId){offeringId=Number(offeringId);
-  const nums=db.certificates.filter(c=>c.offering_id===offeringId)
-    .map(c=>String(c.cert_number??'').trim())
-    .filter(s=>/^\d+$/.test(s)).map(Number);
-  return String((nums.length?Math.max(...nums):0)+1);}
+/* ---- Certificate numbering -----------------------------------------------
+   There used to be two rules for this and they disagreed. Adding a
+   certificate by hand accepted plain integers only, so a roster numbered
+   A-1 … A-12 was left alone and the next one proposed as "1". Issuing them
+   from a closing stripped the non-digits from the same roster and continued
+   from 13. Same file, same data, two answers depending on which door you came
+   in by.
+
+   There is now one rule, and the offering says what it is: a prefix and a
+   width, inferred from what the roster already uses (see MIGRATIONS) and
+   editable on the offering. Both paths read it. */
+function certNumberFormat(offering){
+  const o=typeof offering==='object'?offering:db.offerings.find(x=>x.id===Number(offering));
+  const f=(o&&o.cert_number_format)||settings().default_cert_number_format;
+  return{prefix:(f&&f.prefix)||'',pad:Math.max(1,Number(f&&f.pad)||1)};
+}
+function formatCertNumber(offering,n){
+  const{prefix,pad}=certNumberFormat(offering);
+  return prefix+String(n).padStart(pad,'0');
+}
+// The highest number already issued under the offering's format. Numbers that
+// do not fit the format are ignored rather than coerced — a roster carrying a
+// stray "2026-001" should not push the next one to 2026002.
+function highestCertNumber(offeringId){
+  const o=db.offerings.find(x=>x.id===Number(offeringId));
+  const{prefix}=certNumberFormat(o||offeringId);
+  const re=new RegExp('^'+prefix.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'(\\d+)$');
+  return db.certificates.filter(c=>c.offering_id===Number(offeringId))
+    .reduce((m,c)=>{const g=String(c.cert_number??'').trim().match(re);
+      return g?Math.max(m,Number(g[1])):m;},0);
+}
+// The next certificate number for an offering, following the numbering it is
+// already using.
+function nextCertNumber(offeringId){
+  return formatCertNumber(db.offerings.find(x=>x.id===Number(offeringId))||offeringId,
+    highestCertNumber(offeringId)+1);}
 // The method used on the last deposit for this offering — almost always the
 // same wire instructions as the one before.
 function lastEscrowMethod(offeringId){offeringId=Number(offeringId);
@@ -2524,7 +2682,16 @@ function offeringFromBody(b){
     pass_through_costs:b.pass_through_costs?1:0,costs_label:str(b.costs_label),
     // Links into the party directory. The typed names above stay authoritative
     // for display; these let the app fill the rest and keep it in step.
-    issuer_party_id:numOr(b.issuer_party_id),escrow_party_id:numOr(b.escrow_party_id)};
+    issuer_party_id:numOr(b.issuer_party_id),escrow_party_id:numOr(b.escrow_party_id),
+    // How this offering's certificates are numbered, read by both the manual
+    // form and the closing that issues them.
+    cert_number_format:{prefix:str(b.cert_prefix)||'',pad:Math.max(1,Math.min(8,numOr(b.cert_pad,1)||1))},
+    accrual_convention:str(b.accrual_convention)||null,
+    // Rule 506(d): recorded because its absence from the file is the awkward
+    // part, not its presence.
+    bad_actor_checked_date:str(b.bad_actor_checked_date),
+    bad_actor_notes:str(b.bad_actor_notes),
+    general_solicitation:b.general_solicitation?1:0};
   if(row.no_max)row.target_max_cents=null;        // uncapped raise — ignore any amount
   if(row.no_deadline)row.final_close_date=null;   // open-ended — ignore any date
   return row;
@@ -2774,13 +2941,14 @@ const api={
 
   // Certificate roster — units/interests issued to holders, possibly across
   // multiple classes/series, with % interest and accrued preferred return.
-  async listCertificates(offeringId){offeringId=Number(offeringId);
-    const r=computeCertificates(offeringId);
+  async listCertificates(offeringId,asOf){offeringId=Number(offeringId);
+    const r=computeCertificates(offeringId,asOf);
     return{certificates:r.certificates,classNames:r.classNames,classes:r.classes,classCapital:r.classCapital,
-      hasClassTotals:r.hasClassTotals,
+      hasClassTotals:r.hasClassTotals,asOf:r.asOf,
       totalCapital:r.totalCapital,
       totalAccrued:r.certificates.reduce((a,c)=>a+(c.accrued_calc||0),0),
-      totalPercent:r.certificates.reduce((a,c)=>a+(Number(c.total_pct_calc)||0),0)};},
+      totalOutstanding:r.certificates.reduce((a,c)=>a+(c.accrued_outstanding||0),0),
+      totalPercent:r.certificates.reduce((a,c)=>a+(Number(c.total_pct_shown)||0),0)};},
   async createCertificate(offeringId,b){offeringId=Number(offeringId);
     if(!db.offerings.find(x=>x.id===offeringId))throw new Error('Offering not found');
     const row=certFromBody(b);if(!row.cert_number)throw new Error('Certificate # is required');
@@ -2797,7 +2965,8 @@ const api={
     const certs=db.certificates.filter(c=>c.offering_id===offeringId);
     certs.sort((a,b)=>{const fa=a.funded_date||a.issue_date||'',fb=b.funded_date||b.issue_date||'';
       if(fa!==fb)return fa.localeCompare(fb);return (a.sort_index||0)-(b.sort_index||0)||a.id-b.id;});
-    certs.forEach((c,idx)=>{c.cert_number=String(idx+1);c.sort_index=idx+1;});
+    const o=db.offerings.find(x=>x.id===offeringId);
+    certs.forEach((c,idx)=>{c.cert_number=formatCertNumber(o||offeringId,idx+1);c.sort_index=idx+1;});
     await persist();return{ok:true};},
 
   /* ---- Firm settings ---------------------------------------------------- */
@@ -2815,6 +2984,12 @@ const api={
       automation:b.automation==='off'?'off':'propose',
       mask_account_numbers:b.mask_account_numbers?1:0,
       date_defaults:b.date_defaults?1:0,
+      default_accrual_convention:ACCRUAL_BY_VALUE.has(str(b.default_accrual_convention))
+        ?str(b.default_accrual_convention):'simple/365',
+      default_cert_number_format:{prefix:str(b.default_cert_prefix)||'',
+        pad:Math.max(1,Math.min(8,numOr(b.default_cert_pad,1)||1))},
+      // Not on any form: carried forward so a settings save never resets them.
+      file_prompt_answered:cur.file_prompt_answered,last_copy_at:cur.last_copy_at,
       checklist_template:Array.isArray(b.checklist_template)?b.checklist_template:cur.checklist_template};
     db.settings={...db.settings,...row};await persist();return settings();},
 
@@ -3061,8 +3236,11 @@ function certFromBody(b,existing){const e=existing||{};return{
   // percent_interest: optional manual override of TOTAL % ownership (else computed).
   percent_interest:numOr(b.percent_interest),
   pref_return_rate:numOr(b.pref_return_rate),
-  // accrued_cents: optional manual override (else auto-computed to today).
+  // accrued_cents: optional manual override (else auto-computed to the as-of date).
   accrued_cents:dollarsToCents(b.accrued),
+  // Written down on the certificate, so a convention changed on the offering
+  // later never restates what this one was issued under.
+  accrual_convention:'accrual_convention'in b?(str(b.accrual_convention)||null):(e.accrual_convention??null),
   funded_date:str(b.funded_date),
   accrual_start:'accrual_start'in b?str(b.accrual_start):(e.accrual_start??null),
   closing_id:'closing_id'in b?numOr(b.closing_id):(e.closing_id??null),
@@ -3384,6 +3562,9 @@ function newOfferingDefaults(){
     escrow_agent:escrow?escrow.name:'',
     escrow_bank:escrow?escrow.bank_name||'':'',
     escrow_party_id:escrow?escrow.id:null,
+    cert_prefix:(cfg.default_cert_number_format&&cfg.default_cert_number_format.prefix)||'',
+    cert_pad:(cfg.default_cert_number_format&&cfg.default_cert_number_format.pad)||1,
+    accrual_convention:'',
     launch_date:''};
 }
 // Fill a blank field from a directory entry, and never overwrite something the
@@ -3404,7 +3585,12 @@ function openOfferingForm(existing,onDone){
       escrow_account_number:existing.escrow_account_number,notes:existing.notes,
       default_return_rate:existing.default_return_rate??'',pass_through_costs:existing.pass_through_costs,costs_label:existing.costs_label,
       no_max:existing.no_max,fractional_allowed:existing.fractional_allowed,no_deadline:existing.no_deadline,
-      issuer_party_id:existing.issuer_party_id,escrow_party_id:existing.escrow_party_id}:newOfferingDefaults(),
+      issuer_party_id:existing.issuer_party_id,escrow_party_id:existing.escrow_party_id,
+      cert_prefix:(existing.cert_number_format&&existing.cert_number_format.prefix)||'',
+      cert_pad:(existing.cert_number_format&&existing.cert_number_format.pad)||1,
+      accrual_convention:existing.accrual_convention||'',
+      bad_actor_checked_date:existing.bad_actor_checked_date,bad_actor_notes:existing.bad_actor_notes,
+      general_solicitation:existing.general_solicitation}:newOfferingDefaults(),
     fields:[
       {name:'name',label:'Offering name',required:true,placeholder:'e.g. Acme Fund I'},
       {name:'issuer_name',label:'Issuer / client',half:true,placeholder:'Issuing entity',
@@ -3440,6 +3626,25 @@ function openOfferingForm(existing,onDone){
       {name:'escrow_party_id',type:'hidden'},
       {name:'escrow_bank',label:'Escrow bank',half:true},
       {name:'escrow_account_number',label:'Escrow account #',half:true,mono:true},
+
+      {type:'section',label:'Exemption diligence'},
+      {name:'bad_actor_checked_date',label:'Bad-actor inquiry completed',type:'date',half:true,
+        help:'Rule 506(d). The date the disqualification inquiry was made for the issuer and its covered persons.'},
+      {name:'general_solicitation',label:'This offering is generally solicited or advertised',type:'checkbox',
+        help:'Permitted under 506(c), where every purchaser must be verified. Not permitted under 506(b).'},
+      {name:'bad_actor_notes',label:'Inquiry notes',type:'textarea',rows:2,
+        placeholder:'Who was asked, what was reviewed, and what it found.'},
+
+      {type:'section',label:'Certificates'},
+      {name:'cert_prefix',label:'Certificate number prefix',half:true,mono:true,placeholder:'e.g. A-',
+        help:'Both the closing that issues certificates and the form that adds one by hand follow this.'},
+      {name:'cert_pad',label:'Digits',type:'number',step:'1',half:true,placeholder:'1',
+        help:'3 numbers them 001, 002, 003. 1 leaves them unpadded.'},
+      {name:'accrual_convention',label:'Preferred return accrues',type:'select',half:true,
+        options:[{value:'',label:`— The firm default (${accrualConvention(settings().default_accrual_convention).label}) —`},
+          ...ACCRUAL_CONVENTIONS.map(c=>({value:c.value,label:c.label}))],
+        help:'Applies to certificates issued from now on. Those already issued keep the convention they were written under.'},
+
       {name:'notes',label:'Notes',type:'textarea'}],
     onSubmit:async v=>{const saved=isEdit?await api.updateOffering(existing.id,v):await api.createOffering(v);
       toast(isEdit?'Offering updated.':'Offering created.','success');onDone?.(saved);}});
@@ -3672,6 +3877,9 @@ async function renderOffering(id){
       Escrow:()=>escrowTab(state,drawTab,reloadOffering),Closings:()=>closingsTab(state,drawTab,reloadOffering),
       Certificates:()=>certificatesTab(state),Checklist:()=>checklistTab(state),Reconciliation:()=>reconciliationTab(state)}[state.tab];
     const node=await render();clear(tabContent);tabContent.appendChild(node);}
+  // A tab that carries its own state — the as-of date on the certificate
+  // roster, say — needs a way to draw itself again without losing it.
+  state.redrawTab=drawTab;
   let strip=suggestionPanel(id,async()=>{await reloadOffering();drawTab();})||el('div',{});
   let header=buildHeader();
   function buildHeader(){const o=state.offering,s=o.summary;
@@ -4067,9 +4275,22 @@ function openClosingForm(offeringId,openSubs,existingCount,onDone){
 
 async function certificatesTab(state){
   const offering=state.offering;
-  const[data,investors]=await Promise.all([api.listCertificates(offering.id),api.listInvestors()]);
-  const{certificates,classNames,classes,totalCapital,totalAccrued,totalPercent}=data;
+  // The date the roster speaks as at. Held on the tab state so it survives a
+  // redraw, because "as at 30 June" is a question you ask more than once.
+  if(!state.certAsOf)state.certAsOf=todayISO();
+  const asOf=state.certAsOf;
+  const[data,investors]=await Promise.all([api.listCertificates(offering.id,asOf),api.listInvestors()]);
+  const{certificates,classNames,classes,totalCapital,totalAccrued,totalOutstanding,totalPercent}=data;
   const allClassNames=[...new Set([...(classes||[]).map(c=>c.name),...classNames])];
+  const today=todayISO();
+  const asOfInput=el('input',{type:'date',class:'inline-input date',value:asOf,max:'2999-12-31',
+    'aria-label':'Show the roster as at this date',
+    onchange:e=>{state.certAsOf=e.target.value||today;state.redrawTab();}});
+  const asOfRow=el('div',{class:'asof-row'},
+    el('label',{class:'asof-label'},'As at'),asOfInput,
+    asOf!==today?el('button',{class:'btn btn-ghost btn-sm',onclick:()=>{state.certAsOf=today;state.redrawTab();}},'Back to today'):null,
+    el('span',{class:'field-help',style:'margin:0'},
+      asOf===today?'Accrual is shown to today.':`Accrual, holdings and distributions are shown as they stood on ${fmtDate(asOf)}.`));
   const addBtn=el('button',{class:'btn btn-primary',onclick:()=>openCertificateForm(offering,investors,allClassNames,null,()=>refresh())},'@icon:plus','Add certificate');
   const renumBtn=certificates.length?el('button',{class:'btn btn-ghost btn-sm',title:'Re-assign all certificate numbers 1..N by funding date',
     onclick:async()=>{const ok=await confirmDialog('Re-number every certificate 1…N in funding-date order? Any manual numbers will be replaced.',{confirmLabel:'Renumber'});
@@ -4081,7 +4302,10 @@ async function certificatesTab(state){
       statCard('Certificates',String(certificates.length)),
       statCard('Total capital contributed',money(totalCapital),{kind:'accent'}),
       statCard('Total % ownership',fmtPct(totalPercent),{sub:groups.size>1?`${groups.size} classes`:'issued'}),
-      statCard('Accrued return to date',money(totalAccrued),{sub:'auto-calculated'})),
+      totalOutstanding!==totalAccrued
+        ?statCard('Preferred return outstanding',money(totalOutstanding),{sub:`${money(totalAccrued)} accrued, less distributions`})
+        :statCard('Accrued return',money(totalAccrued),{sub:asOf===today?'to today':`to ${fmtDate(asOf)}`})),
+    asOfRow,
     classStructurePanel(offering,classNames),
     el('div',{class:'section-head'},el('h2',{},'Certificate roster'),el('div',{style:'display:flex;gap:8px'},renumBtn,addBtn)),
     !certificates.length
@@ -4122,9 +4346,15 @@ function classStructurePanel(offering,classNames){
 }
 function certClassPanel(cls,certs,offering,investors,classNames){
   const cap=certs.reduce((a,c)=>a+(c.capital_cents||0),0);
-  const totPct=certs.reduce((a,c)=>a+(Number(c.total_pct_calc)||0),0);
-  const clsPct=certs.reduce((a,c)=>a+(Number(c.pct_of_class_calc)||0),0);
+  // Summed from the settled figures, so the total agrees with the column
+  // above it rather than with an exact arithmetic nobody can see.
+  const totPct=certs.reduce((a,c)=>a+(Number(c.total_pct_shown)||0),0);
+  const clsPct=certs.reduce((a,c)=>a+(Number(c.pct_of_class_shown)||0),0);
   const accr=certs.reduce((a,c)=>a+(c.accrued_calc||0),0);
+  const outstanding=certs.reduce((a,c)=>a+(c.accrued_outstanding||0),0);
+  const paidPref=certs.reduce((a,c)=>a+(c.pref_paid_cents||0),0);
+  // The paid column only earns its width once something has been paid.
+  const anyPaid=paidPref>0;
   const classTotal=certs[0]&&certs[0].class_total_percent!=null?certs[0].class_total_percent:null;
   const sponsor=certs[0]&&certs[0].class_sponsor;
   return el('section',{class:'panel'},
@@ -4138,10 +4368,14 @@ function certClassPanel(cls,certs,offering,investors,classNames){
         el('div',{class:'cell-sub'},'Certificate ',el('span',{class:'mono'},c.cert_number))]},
       {label:'Cert #',hide:true,cls:'mono',render:c=>c.cert_number},
       {label:'Capital',num:true,render:c=>c.capital_cents!=null?money(c.capital_cents):'—'},
-      {label:'% of class',num:true,render:c=>fmtPct(c.pct_of_class_calc)},
-      {label:'Total %',num:true,render:c=>fmtPct(c.total_pct_calc)},
+      {label:'% of class',num:true,render:c=>fmtPct(c.pct_of_class_shown)},
+      {label:'Total %',num:true,render:c=>fmtPct(c.total_pct_shown)},
       {label:'Pref rate',num:true,hide:true,render:c=>c.pref_return_rate!=null?fmtRate(c.pref_return_rate):'—'},
-      {label:'Accrued',num:true,render:c=>c.accrued_calc!=null?money(c.accrued_calc):'—'},
+      {label:'Accrued',num:true,hide:anyPaid,render:c=>c.accrued_calc!=null?money(c.accrued_calc):'—'},
+      anyPaid?{label:'Paid',num:true,render:c=>c.pref_paid_cents?money(c.pref_paid_cents):'—'}:null,
+      // What is still owed, which is what "accrued" was being read as while
+      // nothing ever reduced it.
+      anyPaid?{label:'Outstanding',num:true,render:c=>c.accrued_outstanding!=null?money(c.accrued_outstanding):'—'}:null,
       {label:'Issued',hide:true,render:c=>fmtDate(c.issue_date)},
       {label:'',cls:'row-actions',render:c=>rowActions(
         iconButton('edit',`Edit certificate ${c.cert_number}`,()=>openCertificateForm(offering,investors,classNames,c,()=>refresh())),
@@ -4155,7 +4389,9 @@ function certClassPanel(cls,certs,offering,investors,classNames){
         el('td',{class:'num',dataset:{label:'% of class'}},fmtPct(clsPct)),
         el('td',{class:'num',dataset:{label:'Total %'}},fmtPct(totPct)),
         el('td',{class:'rec-hide'},''),
-        el('td',{class:'num',dataset:{label:'Accrued'}},money(accr)),
+        el('td',{class:anyPaid?'num rec-hide':'num',dataset:{label:'Accrued'}},money(accr)),
+        anyPaid?el('td',{class:'num',dataset:{label:'Paid'}},money(paidPref)):null,
+        anyPaid?el('td',{class:'num',dataset:{label:'Outstanding'}},money(outstanding)):null,
         el('td',{class:'rec-hide'},''),el('td',{class:'rec-hide'},''))}));
 }
 function openCertificateForm(offering,investors,classNames,existing,onDone){
@@ -4169,11 +4405,13 @@ function openCertificateForm(offering,investors,classNames,existing,onDone){
       capital:centsToInput(existing.capital_cents),pct_of_class:existing.pct_of_class??'',percent_interest:existing.percent_interest??'',
       pref_return_rate:existing.pref_return_rate??'',accrued:centsToInput(existing.accrued_cents),
       funded_date:existing.funded_date,issue_date:existing.issue_date,sort_index:existing.sort_index??'',
-      no_capital:existing.no_capital,notes:existing.notes}
+      no_capital:existing.no_capital,notes:existing.notes,
+      accrual_convention:existing.accrual_convention||''}
       // A new certificate opens numbered, classed and rated from the offering.
       :{cert_number:nextCertNumber(offeringId),
         class_name:inherited(scopeFor({offering:o}),'class_name')||o.security_type||'',
         pref_return_rate:inherited(scopeFor({offering:o}),'return_rate')??'',
+        accrual_convention:o.accrual_convention||settings().default_accrual_convention||'',
         issue_date:defaultDate()},
     fields:[
       {name:'cert_number',label:'Certificate #',required:true,half:true,mono:true,help:'The next number in this offering. Change it if you number differently.'},
@@ -4203,7 +4441,11 @@ function openCertificateForm(offering,investors,classNames,existing,onDone){
       {name:'pct_of_class',label:'% of class (override)',type:'number',step:'any',half:true,help:'Leave blank to pro-rate within the class by capital.'},
       {name:'percent_interest',label:'Total % ownership (override)',type:'number',step:'any',half:true,help:'Leave blank to auto-calculate.'},
       {name:'pref_return_rate',label:'Preferred return / interest rate (%)',type:'number',step:'any',half:true},
-      {name:'accrued',label:'Accrued return (override)',type:'money',half:true,help:'Leave blank to auto-calculate from the closing date to today.'},
+      {name:'accrual_convention',label:'Accrues',type:'select',half:true,
+        options:[{value:'',label:`— As the offering says (${accrualConvention(o.accrual_convention||settings().default_accrual_convention).label}) —`},
+          ...ACCRUAL_CONVENTIONS.map(c=>({value:c.value,label:c.label}))],
+        help:'Recorded on this certificate, so changing the offering later leaves it alone.'},
+      {name:'accrued',label:'Accrued return (override)',type:'money',half:true,help:'Leave blank to work it out from the accrual start to the as-of date.'},
       {name:'funded_date',label:'Funded date',type:'date',half:true,help:'Determines certificate order.'},
       {name:'issue_date',label:'Issue date',type:'date',half:true,help:'Auto-set to the closing date.'},
       {name:'sort_index',label:'Order #',type:'number',step:'1',half:true,help:'Override sort order within class.'},
@@ -4413,7 +4655,7 @@ function buildSummaryReport(o,subs,escrowData,reconData,closingsData,certsData){
       el('thead',{},el('tr',{},el('th',{},'Cert #'),el('th',{},'Holder'),el('th',{},'Class'),el('th',{class:'num'},'Capital'),
         el('th',{class:'num'},'% of Class'),el('th',{class:'num'},'Total %'),el('th',{class:'num'},'Pref %'),el('th',{class:'num'},'Accrued'))),
       el('tbody',{},...certs.map(c=>el('tr',{},el('td',{},c.cert_number),el('td',{},c.holder_name||'—'),el('td',{},c.class_name||'—'),
-        el('td',{class:'num'},c.capital_cents!=null?money(c.capital_cents):'—'),el('td',{class:'num'},fmtPct(c.pct_of_class_calc)),el('td',{class:'num'},fmtPct(c.total_pct_calc)),
+        el('td',{class:'num'},c.capital_cents!=null?money(c.capital_cents):'—'),el('td',{class:'num'},fmtPct(c.pct_of_class_shown)),el('td',{class:'num'},fmtPct(c.total_pct_shown)),
         el('td',{class:'num'},c.pref_return_rate!=null?fmtRate(c.pref_return_rate):'—'),el('td',{class:'num'},c.accrued_calc!=null?money(c.accrued_calc):'—')))),
       el('tfoot',{},el('tr',{},el('td',{colspan:'3'},`Total — ${certs.length} certificate${certs.length===1?'':'s'}`),
         el('td',{class:'num'},money(certsData.totalCapital)),el('td',{},''),el('td',{class:'num'},fmtPct(certsData.totalPercent)),
@@ -4558,7 +4800,10 @@ async function renderSettings(){
       default_return_rate:cfg.default_return_rate??'',default_costs_label:cfg.default_costs_label,
       default_min_investment:centsToInput(cfg.default_min_investment_cents),
       default_escrow_party_id:cfg.default_escrow_party_id??'',
-      automation:cfg.automation,mask_account_numbers:cfg.mask_account_numbers,date_defaults:cfg.date_defaults},
+      automation:cfg.automation,mask_account_numbers:cfg.mask_account_numbers,date_defaults:cfg.date_defaults,
+      default_accrual_convention:cfg.default_accrual_convention||'simple/365',
+      default_cert_prefix:(cfg.default_cert_number_format&&cfg.default_cert_number_format.prefix)||'',
+      default_cert_pad:(cfg.default_cert_number_format&&cfg.default_cert_number_format.pad)||1},
     fields:[
       {name:'default_exemption',label:'Exemption',type:'select',options:['',...EXEMPTIONS],half:true,
         help:'Every new offering starts here.'},
@@ -4573,7 +4818,13 @@ async function renderSettings(){
         options:[{value:'propose',label:'Propose changes I can accept'},{value:'off',label:'Off'}],
         help:'Nothing is ever written without you pressing Accept.'},
       {name:'date_defaults',label:'Open date fields on today',type:'checkbox'},
-      {name:'mask_account_numbers',label:'Mask escrow account numbers in printed reports',type:'checkbox'}],
+      {name:'mask_account_numbers',label:'Mask escrow account numbers in printed reports',type:'checkbox'},
+      {name:'default_accrual_convention',label:'Preferred return accrues',type:'select',half:true,
+        options:ACCRUAL_CONVENTIONS.map(c=>({value:c.value,label:c.label})),
+        help:'An offering may override this. Certificates keep the convention they were issued under.'},
+      {name:'default_cert_prefix',label:'Certificate number prefix',half:true,mono:true,placeholder:'e.g. A-',
+        help:'What new offerings start from.'},
+      {name:'default_cert_pad',label:'Digits',type:'number',step:'1',half:true,placeholder:'1'}],
     onSubmit:async v=>{await api.saveSettings({...cfg,...v});toast('Defaults saved.','success');redraw();}});
 
   const editChecklist=()=>{
@@ -4651,7 +4902,9 @@ async function renderSettings(){
         kv('Usual escrow agent',cfg.default_escrow_party_id?(partyById(cfg.default_escrow_party_id)||{}).name:null),
         kv('Suggestions',cfg.automation==='off'?'Off':'Propose changes I can accept'),
         kv('Date fields',cfg.date_defaults?'Open on today':'Open empty'),
-        kv('Account numbers in reports',cfg.mask_account_numbers?'Masked':'Shown in full')]))));
+        kv('Account numbers in reports',cfg.mask_account_numbers?'Masked':'Shown in full'),
+        kv('Preferred return accrues',accrualConvention(cfg.default_accrual_convention).label),
+        kv('Certificate numbering',formatCertNumber({cert_number_format:cfg.default_cert_number_format},1)+', '+formatCertNumber({cert_number_format:cfg.default_cert_number_format},2)+', …')]))));
 
   wrap.appendChild(el('section',{class:'panel'},
     el('div',{class:'section-head',style:'margin-top:0'},
