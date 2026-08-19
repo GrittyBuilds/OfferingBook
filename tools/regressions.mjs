@@ -155,6 +155,57 @@ const read = page => page.evaluate(() => JSON.parse(localStorage.getItem('munime
   ok(warned, 'a firm with only settings and parties still counts as having data')
 }
 
+// --- The cap table's percentage column adds up -----------------------------
+// Three equal holders come to 33.333333…% each. Rounded independently that is
+// a column reading 99.9999%, which whoever is holding the binder reads as an
+// error in the document rather than as a rounding artefact.
+{
+  const seed = base({
+    offerings: [{ id: 1, name: 'Thirds LLC', status: 'Closed', classes: [], tranches: [], created_at: iso }],
+    investors: [1, 2, 3].map(n => ({ id: n, name: `Holder ${n}`, entity_type: 'Entity', created_at: iso })),
+    certificates: [1, 2, 3].map(n => ({
+      id: n, offering_id: 1, investor_id: n, cert_number: String(n), class_name: 'Class A',
+      capital_cents: 1000000, sort_index: n, no_capital: 0, created_at: iso,
+    })),
+  })
+  const shown = await withApp(seed, async page => {
+    await page.evaluate(() => { location.hash = '#/offerings/1?tab=Certificates' })
+    await page.waitForTimeout(700)
+    return page.locator('#view').innerText()
+  })
+  const pcts = [...shown.matchAll(/(\d+\.\d{4})%/g)].map(m => Number(m[1]))
+  // The three holder rows plus the subtotal row, twice over (% of class and
+  // total %). What matters is that a 100.0000 appears and no 99.9999 does.
+  ok(pcts.includes(100), 'the settled percentage column totals exactly 100.0000%')
+  ok(!pcts.includes(99.9999), 'and never leaves the reader a 99.9999% to explain')
+}
+
+// --- One rule for certificate numbers --------------------------------------
+// Adding one by hand accepted plain integers only, so a roster numbered
+// A-1 … A-3 proposed "1"; issuing from a closing stripped the non-digits and
+// proposed 4. Same data, two answers.
+{
+  const seed = base({
+    offerings: [{
+      id: 1, name: 'Prefixed Fund', status: 'Open', classes: [], tranches: [],
+      cert_number_format: { prefix: 'A-', pad: 1 }, created_at: iso,
+    }],
+    investors: [{ id: 1, name: 'A Co', entity_type: 'Entity', created_at: iso }],
+    certificates: [1, 2, 3].map(n => ({
+      id: n, offering_id: 1, investor_id: 1, cert_number: `A-${n}`, class_name: 'Units',
+      capital_cents: 100000, sort_index: n, no_capital: 0, created_at: iso,
+    })),
+  })
+  const proposed = await withApp(seed, async page => {
+    await page.evaluate(() => { location.hash = '#/offerings/1?tab=Certificates' })
+    await page.waitForTimeout(700)
+    await page.locator('#view button', { hasText: 'Add certificate' }).first().evaluate(b => b.click())
+    await page.waitForTimeout(400)
+    return page.locator('.modal input[name=cert_number]').inputValue()
+  })
+  ok(proposed === 'A-4', `adding one by hand follows the roster's own numbering (got ${proposed})`)
+}
+
 console.log('page errors:', errors.length ? errors : 'none')
 if (errors.length) fails.push('console errors')
 await browser.close()

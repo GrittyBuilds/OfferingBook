@@ -1,0 +1,49 @@
+name: test
+
+# Muniment.html is committed as well as built, because it is the product —
+# people download that one file. That means it can drift from src/, and a
+# suite passing against a stale file would be worse than one failing. So the
+# build check runs first, on every push.
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      # The units need nothing but Node, so they run before anything is
+      # installed: a broken figure is reported in seconds rather than after a
+      # browser download.
+      - name: Units
+        run: node tools/units.mjs
+
+      - name: Muniment.html matches src/
+        run: node tools/build.mjs --check
+
+      - name: Install Playwright
+        run: |
+          npm install
+          npx playwright install --with-deps chromium
+
+      - name: Browser suites
+        run: node tools/test.mjs
+
+      - name: Screenshots on failure
+        if: failure()
+        run: node tools/smoke.mjs --shots || true
+
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: smoke-screenshots
+          path: .smoke-shots/
+          if-no-files-found: ignore
